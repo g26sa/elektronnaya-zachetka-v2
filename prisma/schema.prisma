@@ -1,0 +1,291 @@
+// Электронная зачётная книжка студента
+// БД: Microsoft SQL Server (видна в SQL Server Management Studio).
+// Перечисления (enum) в Prisma не поддерживаются провайдером sqlserver —
+// поэтому соответствующие поля хранятся как String с фиксированными
+// допустимыми значениями (см. src/types/enums.ts).
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlserver"
+  url      = env("DATABASE_URL")
+}
+
+// Допустимые значения «перечислений» см. в src/types/enums.ts:
+//   Role            : STUDENT | TEACHER | HEAD
+//   AssessmentType  : EXAM | CREDIT | GRADED_CREDIT
+//   PracticeKind    : EDUCATIONAL | PRODUCTION | PREDIPLOMA
+//   Admission       : ADMITTED | NOT_ADMITTED
+//   AuditAction     : CREATE | UPDATE | DELETE | EXPORT | LOGIN | ROLE_CHANGE
+
+// ─── Учреждение и пользователи ─────────────────────────────────────────────
+
+model Institution {
+  id        String   @id @default(cuid())
+  name      String                 // полное наименование
+  shortName String?                // краткое наименование
+  address   String?
+  ogrn      String?
+  inn       String?
+  logoUrl   String?
+  headName  String?                // ФИО руководителя учреждения
+  headTitle String?                // должность ("Директор")
+  city      String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  role         String                  // Role: STUDENT | TEACHER | HEAD
+  fullName     String                  // ФИО полностью
+  position     String?                 // должность (для преп./зав.)
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  student              Student?
+  teachingAssessments  Assessment[] @relation("AssessmentTeacher")
+  courseWorksTaught    CourseWork[] @relation("CourseWorkTeacher")
+  practicesAsInstSup   Practice[]   @relation("PracticeInstSupervisor")
+  vkrSupervised        VKR[]        @relation("VKRSupervisor")
+  defensesPresided     Defense[]    @relation("DefenseChair")
+  stateExamsPresided   StateExam[]  @relation("StateExamChair")
+  templatesEdited      DocumentTemplate[] @relation("TemplateEditor")
+  auditLogs            AuditLog[]
+}
+
+// ─── Учебная структура ─────────────────────────────────────────────────────
+
+model Group {
+  id         String    @id @default(cuid())
+  name       String    @unique               // "ИС-21"
+  speciality String?                          // специальность / направление
+  startYear  Int                              // год набора
+  students   Student[]
+}
+
+model Student {
+  id               String    @id @default(cuid())
+  userId           String    @unique
+  user             User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  recordBookNumber String    @unique          // номер зачётной книжки
+  groupId          String
+  group            Group     @relation(fields: [groupId], references: [id])
+  birthDate        DateTime?
+  enrollmentDate   DateTime
+  enrollmentOrder  String?                    // приказ о зачислении
+  expulsionDate    DateTime?
+  expulsionOrder   String?
+  currentCourse    Int       @default(1)
+
+  assessments Assessment[]
+  courseWorks CourseWork[]
+  practices   Practice[]
+  vkr         VKR?
+  stateExams  StateExam[]
+}
+
+model Semester {
+  id           String   @id @default(cuid())
+  course       Int                            // 1..6
+  number       Int                            // 1 или 2 (осенний/весенний)
+  academicYear String                         // "2025/2026"
+  startDate    DateTime
+  endDate      DateTime
+
+  assessments Assessment[]
+  courseWorks CourseWork[]
+  practices   Practice[]
+
+  @@unique([course, number, academicYear])
+}
+
+model Discipline {
+  id          String  @id @default(cuid())
+  name        String  @unique
+  totalHours  Int?
+  creditUnits Float?
+
+  assessments Assessment[]
+  courseWorks CourseWork[]
+}
+
+// ─── 2. Промежуточная аттестация ───────────────────────────────────────────
+
+model Assessment {
+  id             String         @id @default(cuid())
+  studentId      String
+  student        Student        @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  semesterId     String
+  semester       Semester       @relation(fields: [semesterId], references: [id])
+  disciplineId   String
+  discipline     Discipline     @relation(fields: [disciplineId], references: [id])
+  type           String                          // AssessmentType: EXAM | CREDIT | GRADED_CREDIT
+  grade          String                          // "5" / "4" / "3" / "зачтено" / "не зачтено"
+  hours          Int?
+  creditUnits    Float?
+  date           DateTime
+  teacherId      String
+  teacher        User           @relation("AssessmentTeacher", fields: [teacherId], references: [id], onUpdate: NoAction, onDelete: NoAction)
+  protocolNumber String?                         // № ведомости
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([studentId, semesterId])
+}
+
+// ─── 3. Курсовые работы ────────────────────────────────────────────────────
+
+model CourseWork {
+  id           String     @id @default(cuid())
+  studentId    String
+  student      Student    @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  semesterId   String
+  semester     Semester   @relation(fields: [semesterId], references: [id])
+  disciplineId String
+  discipline   Discipline @relation(fields: [disciplineId], references: [id])
+  topic        String
+  grade        String
+  date         DateTime
+  teacherId    String
+  teacher      User       @relation("CourseWorkTeacher", fields: [teacherId], references: [id], onUpdate: NoAction, onDelete: NoAction)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([studentId])
+}
+
+// ─── 4. Практика ───────────────────────────────────────────────────────────
+
+model Practice {
+  id              String       @id @default(cuid())
+  studentId       String
+  student         Student      @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  semesterId      String
+  semester        Semester     @relation(fields: [semesterId], references: [id])
+  course          Int
+  kind            String                          // PracticeKind: EDUCATIONAL | PRODUCTION | PREDIPLOMA
+  place           String                          // место прохождения
+  hours           Int?
+  creditUnits     Float?
+  startDate       DateTime
+  endDate         DateTime
+  grade           String
+  gradeDate       DateTime
+
+  // Руководитель от учреждения — пользователь системы (преподаватель)
+  instSupervisorId String
+  instSupervisor   User         @relation("PracticeInstSupervisor", fields: [instSupervisorId], references: [id], onUpdate: NoAction, onDelete: NoAction)
+
+  // Руководитель от организации — внешнее лицо, храним как текст
+  orgSupervisorName String?
+  orgSupervisorPosition String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([studentId])
+}
+
+// ─── 5. ГИА (ВКР) ──────────────────────────────────────────────────────────
+
+model VKR {
+  id            String    @id @default(cuid())
+  studentId     String    @unique
+  student       Student   @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  topic         String
+  type          String?                            // вид: «дипломный проект», «дипломная работа», ...
+  approvedOrder String?                            // приказ об утверждении темы
+  approvedDate  DateTime?
+  supervisorId  String
+  supervisor    User      @relation("VKRSupervisor", fields: [supervisorId], references: [id], onUpdate: NoAction, onDelete: NoAction)
+
+  defense Defense?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// ─── 6. Защита ВКР ─────────────────────────────────────────────────────────
+
+model Defense {
+  id             String     @id @default(cuid())
+  vkrId          String     @unique
+  vkr            VKR        @relation(fields: [vkrId], references: [id], onDelete: Cascade)
+  admission      String                            // Admission: ADMITTED | NOT_ADMITTED
+  admissionDate  DateTime?
+  date           DateTime?
+  grade          String?
+  chairId        String?
+  chair          User?      @relation("DefenseChair", fields: [chairId], references: [id], onUpdate: NoAction, onDelete: NoAction)
+  protocolNumber String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// ─── 7. Государственный экзамен ────────────────────────────────────────────
+
+model StateExam {
+  id             String     @id @default(cuid())
+  studentId      String
+  student        Student    @relation(fields: [studentId], references: [id], onUpdate: NoAction, onDelete: NoAction)
+  name           String                            // название экзамена
+  admission      String                            // Admission: ADMITTED | NOT_ADMITTED
+  admissionDate  DateTime?
+  date           DateTime?
+  grade          String?
+  chairId        String?
+  chair          User?      @relation("StateExamChair", fields: [chairId], references: [id], onUpdate: NoAction, onDelete: NoAction)
+  protocolNumber String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([studentId])
+}
+
+// ─── 9. Шаблоны документов (low-code) ──────────────────────────────────────
+
+model DocumentTemplate {
+  id           String   @id @default(cuid())
+  code         String   @unique     // 'RECORD_BOOK', 'ATTESTATION_REPORT', ...
+  name         String
+  description  String?
+  content      String   @db.NVarChar(Max)        // HTML/handlebars-подобный шаблон
+  fieldsJson   String?  @db.NVarChar(Max)
+  sectionsJson String?  @db.NVarChar(Max)
+  isActive     Boolean  @default(true)
+  version      Int      @default(1)
+
+  updatedById  String?
+  updatedBy    User?    @relation("TemplateEditor", fields: [updatedById], references: [id], onUpdate: NoAction, onDelete: NoAction)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// ─── 8. История изменений (audit log) ──────────────────────────────────────
+
+model AuditLog {
+  id        String      @id @default(cuid())
+  userId    String?
+  user      User?       @relation(fields: [userId], references: [id], onUpdate: NoAction, onDelete: NoAction)
+  action    String                                  // AuditAction: CREATE | UPDATE | DELETE | EXPORT | LOGIN | ROLE_CHANGE
+  entity    String                                  // 'Assessment', 'Student', ...
+  entityId  String?
+  diff      String?  @db.NVarChar(Max)              // JSON: { before, after }
+  ip        String?
+  createdAt DateTime    @default(now())
+
+  @@index([entity, entityId])
+  @@index([userId])
+  @@index([createdAt])
+}

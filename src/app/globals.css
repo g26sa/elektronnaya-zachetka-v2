@@ -1,0 +1,73 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --doc-padding: 24mm;
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  @apply bg-background text-foreground antialiased;
+  font-feature-settings: "rlig" 1, "calt" 1;
+}
+
+/* Печатный вид документов */
+.document {
+  @apply font-serif text-[14px] leading-[1.45] text-black bg-white;
+}
+
+.document h1 {
+  @apply text-center font-bold uppercase tracking-wide text-[16px] my-4;
+}
+
+.document h2 {
+  @apply text-center font-semibold text-[15px] my-3;
+}
+
+.document table {
+  @apply w-full border-collapse;
+}
+
+.document table th,
+.document table td {
+  @apply border border-black px-2 py-1 align-top;
+}
+
+.document table th {
+  @apply font-semibold text-center bg-white;
+}
+
+.document .signatures {
+  @apply mt-10 grid grid-cols-2 gap-10;
+}
+
+.document .signature-line {
+  @apply mt-8 border-t border-black pt-1 text-[12px] text-center;
+}
+
+@media print {
+  body {
+    background: white;
+  }
+  .no-print {
+    display: none !important;
+  }
+  .document {
+    margin: 0;
+    padding: var(--doc-padding);
+  }
+  @page {
+    size: A4;
+    margin: 0;
+  }
+}
+
+/* Деловые таблицы интерфейса */
+.data-table th {
+  @apply bg-secondary text-foreground font-semibold;
+}
