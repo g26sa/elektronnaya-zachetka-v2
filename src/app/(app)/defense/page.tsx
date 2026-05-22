@@ -7,6 +7,8 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { admissionLabel, formatDate } from "@/lib/utils";
 import { DefenseForm } from "./DefenseForm";
+import { TeacherDefenseView, type DefenseRow } from "./TeacherDefenseView";
+import { getTeacherPlan } from "@/lib/teacherPlan";
 import { Pencil } from "lucide-react";
 
 export default async function DefensePage({ searchParams }: { searchParams: Promise<{ studentId?: string }> }) {
@@ -17,6 +19,8 @@ export default async function DefensePage({ searchParams }: { searchParams: Prom
     const me = await prisma.student.findUnique({ where: { userId: session.userId } });
     studentId = me?.id ?? null;
   }
+
+  if (session.role === "TEACHER") return <TeacherFlow teacherId={session.userId} />;
   const [students, chairs, vkr] = await Promise.all([
     prisma.student.findMany({ include: { user: true, group: true }, orderBy: { user: { fullName: "asc" } } }),
     prisma.user.findMany({ where: { role: { in: ["TEACHER", "HEAD"] } }, orderBy: { fullName: "asc" } }),
@@ -44,7 +48,7 @@ export default async function DefensePage({ searchParams }: { searchParams: Prom
       )}
 
       {!vkr ? (
-        <Card><CardContent className="p-6 text-sm text-muted-foreground">Сначала назначьте тему ВКР в разделе «ГИА».</CardContent></Card>
+        <Card><CardContent className="p-6 text-sm text-muted-foreground">Сначала назначьте тему ВКР в разделе «Выпускная квалификационная работа».</CardContent></Card>
       ) : (
         <Card>
           <CardHeader><CardTitle className="text-base flex items-center justify-between">
@@ -90,4 +94,54 @@ export default async function DefensePage({ searchParams }: { searchParams: Prom
 
 function Fld({ label, v }: { label: string; v: React.ReactNode }) {
   return <div><dt className="text-xs uppercase text-muted-foreground">{label}</dt><dd className="font-medium">{v}</dd></div>;
+}
+
+async function TeacherFlow({ teacherId }: { teacherId: string }) {
+  const [plan, chairs] = await Promise.all([
+    getTeacherPlan(teacherId),
+    prisma.gekChair.findMany({ where: { isActive: true }, orderBy: [{ year: "desc" }, { fullName: "asc" }] }),
+  ]);
+
+  const defPlan = plan.filter((p) => (p.kind === "VKR" || p.kind === "DEFENSE_CHAIR") && p.studentId);
+  const studentIds = Array.from(new Set(defPlan.map((p) => p.studentId!)));
+  const [students, vkrs] = await Promise.all([
+    studentIds.length > 0
+      ? prisma.student.findMany({ where: { id: { in: studentIds } }, include: { user: true, group: true } })
+      : Promise.resolve([]),
+    studentIds.length > 0
+      ? prisma.vKR.findMany({ where: { studentId: { in: studentIds } }, include: { defense: { include: { chair: true } } } })
+      : Promise.resolve([]),
+  ]);
+  const vkrByStudent = new Map<string, (typeof vkrs)[number]>();
+  for (const v of vkrs) vkrByStudent.set(v.studentId, v);
+
+  const rows: DefenseRow[] = students.map((s) => {
+    const v = vkrByStudent.get(s.id) ?? null;
+    const planEntry = defPlan.find((p) => p.studentId === s.id);
+    return {
+      studentId: s.id,
+      studentName: s.user.fullName,
+      groupName: s.group.name,
+      groupSpeciality: s.group.speciality ?? "",
+      course: planEntry?.semester?.course ?? s.currentCourse,
+      vkrTopic: v?.topic ?? null,
+      admission: v?.defense?.admission ?? null,
+      admissionDate: v?.defense?.admissionDate ?? null,
+      date: v?.defense?.date ?? null,
+      grade: v?.defense?.grade ?? null,
+      chairName: v?.defense?.chair?.fullName ?? null,
+    };
+  });
+
+  return (
+    <div className="space-y-4">
+      <div>
+        <h1 className="text-2xl font-semibold">Защита ВКР</h1>
+      </div>
+      <TeacherDefenseView
+        rows={rows}
+        chairs={chairs.map((c) => ({ id: c.id, fullName: c.fullName }))}
+      />
+    </div>
+  );
 }

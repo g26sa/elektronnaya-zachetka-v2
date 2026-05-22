@@ -5,6 +5,8 @@ import { can } from "@/lib/rbac";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { VkrForm } from "./VkrForm";
+import { TeacherVkrView, type VkrRow } from "./TeacherVkrView";
+import { getTeacherPlan } from "@/lib/teacherPlan";
 import { formatDate } from "@/lib/utils";
 import { Pencil, Printer } from "lucide-react";
 
@@ -16,6 +18,9 @@ export default async function GiaPage({ searchParams }: { searchParams: Promise<
     const me = await prisma.student.findUnique({ where: { userId: session.userId } });
     studentId = me?.id ?? null;
   }
+
+  // ─── ПРЕПОДАВАТЕЛЬ — новый flow по студентам из плана VKR ──────────────
+  if (session.role === "TEACHER") return <TeacherFlow teacherId={session.userId} />;
   const [students, teachers, vkr] = await Promise.all([
     prisma.student.findMany({ include: { user: true, group: true }, orderBy: { user: { fullName: "asc" } } }),
     prisma.user.findMany({ where: { role: { in: ["TEACHER", "HEAD"] } }, orderBy: { fullName: "asc" } }),
@@ -91,4 +96,57 @@ export default async function GiaPage({ searchParams }: { searchParams: Promise<
 
 function Fld({ label, v }: { label: string; v: string }) {
   return <div><dt className="text-xs uppercase text-muted-foreground">{label}</dt><dd className="font-medium">{v}</dd></div>;
+}
+
+// ──────────────────────────────────────────────────────────────────────────
+// ПРЕПОДАВАТЕЛЬ: ВКР по студентам из плана VKR
+// ──────────────────────────────────────────────────────────────────────────
+async function TeacherFlow({ teacherId }: { teacherId: string }) {
+  const [plan, vkrTypes] = await Promise.all([
+    getTeacherPlan(teacherId),
+    prisma.vkrType.findMany({ where: { isActive: true }, orderBy: { sortOrder: "asc" } }),
+  ]);
+
+  const vkrPlan = plan.filter((p) => p.kind === "VKR" && p.studentId);
+  const studentIds = vkrPlan.map((p) => p.studentId!);
+  const [students, vkrs] = await Promise.all([
+    studentIds.length > 0
+      ? prisma.student.findMany({
+          where: { id: { in: studentIds } },
+          include: { user: true, group: true },
+        })
+      : Promise.resolve([]),
+    studentIds.length > 0
+      ? prisma.vKR.findMany({ where: { studentId: { in: studentIds } } })
+      : Promise.resolve([]),
+  ]);
+  const vkrByStudent = new Map<string, (typeof vkrs)[number]>();
+  for (const v of vkrs) vkrByStudent.set(v.studentId, v);
+
+  const rows: VkrRow[] = students.map((s) => {
+    const v = vkrByStudent.get(s.id) ?? null;
+    const planEntry = vkrPlan.find((p) => p.studentId === s.id);
+    return {
+      id: v?.id ?? null,
+      studentId: s.id,
+      studentName: s.user.fullName,
+      groupId: s.groupId,
+      groupName: s.group.name,
+      groupSpeciality: s.group.speciality ?? "",
+      course: planEntry?.semester?.course ?? s.currentCourse,
+      topic: v?.topic ?? null,
+      type: v?.type ?? null,
+      approvedOrder: v?.approvedOrder ?? null,
+      approvedDate: v?.approvedDate ?? null,
+    };
+  });
+
+  return (
+    <div className="space-y-4">
+      <div>
+        <h1 className="text-2xl font-semibold">Выпускная квалификационная работа</h1>
+      </div>
+      <TeacherVkrView rows={rows} vkrTypes={vkrTypes.map((t) => ({ id: t.id, name: t.name }))} />
+    </div>
+  );
 }

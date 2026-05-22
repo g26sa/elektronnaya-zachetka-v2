@@ -15,6 +15,7 @@ export function AssessmentRowActions({
   teachers,
   canEdit,
   canDelete,
+  lockTeacher,
 }: {
   id: string;
   initial: Parameters<typeof AssessmentForm>[0]["initial"];
@@ -24,6 +25,7 @@ export function AssessmentRowActions({
   teachers: RefOption[];
   canEdit: boolean;
   canDelete: boolean;
+  lockTeacher?: boolean;
 }) {
   return (
     <div className="flex justify-end gap-1">
@@ -35,6 +37,7 @@ export function AssessmentRowActions({
           semesters={semesters}
           disciplines={disciplines}
           teachers={teachers}
+          lockTeacher={lockTeacher}
           trigger={
             <Button variant="ghost" size="icon" title="Редактировать">
               <Pencil className="h-4 w-4" />

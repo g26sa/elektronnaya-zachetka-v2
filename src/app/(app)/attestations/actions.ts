@@ -11,6 +11,8 @@ export async function createAssessment(input: unknown) {
   const session = await getSession();
   assertCan(session, "assessment:create");
   const data = assessmentSchema.parse(input);
+  // Преподаватели могут выставлять оценки только от своего имени.
+  const teacherId = session.role === "TEACHER" ? session.userId : data.teacherId;
   const created = await prisma.assessment.create({
     data: {
       studentId: data.studentId,
@@ -21,7 +23,7 @@ export async function createAssessment(input: unknown) {
       hours: data.hours ?? null,
       creditUnits: data.creditUnits ?? null,
       date: new Date(data.date),
-      teacherId: data.teacherId,
+      teacherId,
       protocolNumber: data.protocolNumber ?? null,
     },
   });
@@ -41,6 +43,11 @@ export async function updateAssessment(id: string, input: unknown) {
   assertCan(session, "assessment:edit");
   const data = assessmentSchema.parse(input);
   const before = await prisma.assessment.findUnique({ where: { id } });
+  // Преподаватели: только свои оценки, и только от своего имени.
+  if (session.role === "TEACHER" && before && before.teacherId !== session.userId) {
+    throw new Error("Можно редактировать только собственные оценки");
+  }
+  const teacherId = session.role === "TEACHER" ? session.userId : data.teacherId;
   const updated = await prisma.assessment.update({
     where: { id },
     data: {
@@ -52,7 +59,7 @@ export async function updateAssessment(id: string, input: unknown) {
       hours: data.hours ?? null,
       creditUnits: data.creditUnits ?? null,
       date: new Date(data.date),
-      teacherId: data.teacherId,
+      teacherId,
       protocolNumber: data.protocolNumber ?? null,
     },
   });
@@ -72,6 +79,9 @@ export async function deleteAssessment(id: string) {
   const session = await getSession();
   if (!can(session, "assessment:delete")) throw new Error("Нет прав");
   const before = await prisma.assessment.findUnique({ where: { id } });
+  if (session!.role === "TEACHER" && before && before.teacherId !== session!.userId) {
+    throw new Error("Можно удалять только собственные оценки");
+  }
   await prisma.assessment.delete({ where: { id } });
   await audit({ userId: session!.userId, action: "DELETE", entity: "Assessment", entityId: id, before });
   revalidatePath("/attestations");

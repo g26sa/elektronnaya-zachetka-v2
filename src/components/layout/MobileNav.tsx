@@ -10,7 +10,8 @@ import { logoutAction } from "@/app/(app)/logout/actions";
 import {
   Menu, X,
   LayoutDashboard, User, ClipboardList, BookOpen, Briefcase,
-  GraduationCap, ScrollText, FileBadge, History, FileCog, Users, Building2,
+  GraduationCap, ScrollText, FileBadge, History, FileCog, Users, UsersRound, Building2,
+  CalendarRange,
   LogOut,
 } from "lucide-react";
 
@@ -27,6 +28,10 @@ const ITEMS: Item[] = [
   { href: "/defense", label: "Защита ВКР", icon: ScrollText, roles: ["STUDENT", "TEACHER", "HEAD"] },
   { href: "/state-exam", label: "Государственный экзамен", icon: FileBadge, roles: ["STUDENT", "TEACHER", "HEAD"] },
   { href: "/audit", label: "История изменений", icon: History, roles: ["HEAD"] },
+  { href: "/groups", label: "Группы", icon: UsersRound, roles: ["HEAD"] },
+  { href: "/plan", label: "Планы преподавателей", icon: CalendarRange, roles: ["HEAD"] },
+  { href: "/vkr-types", label: "Виды ВКР", icon: ScrollText, roles: ["HEAD"] },
+  { href: "/gek-chairs", label: "Председатели ГЭК", icon: FileBadge, roles: ["HEAD"] },
   { href: "/templates", label: "Шаблоны отчётов", icon: FileCog, roles: ["HEAD"] },
   { href: "/users", label: "Управление ролями", icon: Users, roles: ["HEAD"] },
   { href: "/institution", label: "Учреждение", icon: Building2, roles: ["HEAD"] },

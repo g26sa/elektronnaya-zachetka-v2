@@ -1,3 +1,4 @@
+import { randomFillSync } from "node:crypto";
 import nodemailer, { type Transporter } from "nodemailer";
 
 /**
@@ -31,6 +32,39 @@ export type SendMailParams = {
   text: string;
   html?: string;
 };
+
+export async function sendCredentialsEmail(params: {
+  to: string;
+  fullName: string;
+  password: string;
+  isReset?: boolean;
+}): Promise<{ ok: boolean; reason?: string }> {
+  const loginUrl = (process.env.APP_URL || "http://localhost:3000").replace(/\/$/, "") + "/login";
+  const subject = params.isReset
+    ? "Новый пароль — Электронная зачётная книжка"
+    : "Доступ к электронной зачётной книжке";
+
+  const intro = params.isReset
+    ? `Здравствуйте, ${params.fullName}. Для вашей учётной записи задан новый пароль.`
+    : `Здравствуйте, ${params.fullName}. Вам создан доступ к электронной зачётной книжке.`;
+
+  return sendMail({
+    to: params.to,
+    subject,
+    text:
+      `${intro}\n\n` +
+      `Вход: ${loginUrl}\n` +
+      `Email: ${params.to}\n` +
+      `Пароль: ${params.password}\n\n` +
+      `Рекомендуем сменить пароль через «Забыли пароль?» после первого входа.\n`,
+    html:
+      `<p>${intro}</p>` +
+      `<p><a href="${loginUrl}">Войти в систему</a></p>` +
+      `<p>Email: <strong>${params.to}</strong><br>` +
+      `Пароль: <strong style="font-family:monospace">${params.password}</strong></p>` +
+      `<p style="color:#6b7280;font-size:12px">Никому не пересылайте это письмо.</p>`,
+  });
+}
 
 export async function sendMail(params: SendMailParams): Promise<{ ok: boolean; reason?: string }> {
   const transport = getTransport();
@@ -73,13 +107,11 @@ export async function sendMail(params: SendMailParams): Promise<{ ok: boolean; r
 
 /**
  * Генерирует криптостойкий случайный пароль из заданного алфавита.
+ * Алфавит без визуально похожих символов (0/O, 1/l, I).
  */
 export function generatePassword(length = 10): string {
   const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789";
   const bytes = new Uint8Array(length);
-  // node:crypto
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const { randomFillSync } = require("node:crypto") as typeof import("node:crypto");
   randomFillSync(bytes);
   let out = "";
   for (let i = 0; i < length; i++) out += alphabet[bytes[i] % alphabet.length];

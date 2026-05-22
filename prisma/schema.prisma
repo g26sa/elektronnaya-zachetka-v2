@@ -1,8 +1,6 @@
 // Электронная зачётная книжка студента
 // БД: Microsoft SQL Server (видна в SQL Server Management Studio).
-// Перечисления (enum) в Prisma не поддерживаются провайдером sqlserver —
-// поэтому соответствующие поля хранятся как String с фиксированными
-// допустимыми значениями (см. src/types/enums.ts).
+// Поля enum-типов хранятся как String — типизация на уровне TS в src/types/enums.ts.
 
 generator client {
   provider = "prisma-client-js"
@@ -30,8 +28,11 @@ model Institution {
   ogrn      String?
   inn       String?
   logoUrl   String?
-  headName  String?                // ФИО руководителя учреждения
-  headTitle String?                // должность ("Директор")
+  headName  String?                // ФИО руководителя учреждения (директор)
+  headTitle String?                // должность руководителя ("Директор")
+  departmentHeadName  String?      // ФИО заведующего отделением (учебной частью)
+  departmentHeadTitle String?      // должность ("Заведующий отделением")
+  departmentName      String?      // название отделения / специальности
   city      String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -57,6 +58,84 @@ model User {
   stateExamsPresided   StateExam[]  @relation("StateExamChair")
   templatesEdited      DocumentTemplate[] @relation("TemplateEditor")
   auditLogs            AuditLog[]
+  passwordResetTokens  PasswordResetToken[]
+  teachingAssignments  TeachingAssignment[] @relation("TeacherAssignment")
+  notifications        Notification[]       @relation("UserNotifications")
+}
+
+// ─── План преподавателя (что он ведёт) ─────────────────────────────────────
+// Заведующий формирует записи: «препод X ведёт дисциплину Y в группе Z
+// в семестре S, часы H». Для ВКР/защиты/гос.экзамена — привязка к конкретному
+// студенту. Все формы выставления оценок преподавателем ограничены этим планом.
+model TeachingAssignment {
+  id           String  @id @default(cuid())
+  teacherId    String
+  teacher      User    @relation("TeacherAssignment", fields: [teacherId], references: [id], onUpdate: NoAction, onDelete: NoAction)
+  kind         String  // ASSESSMENT | COURSEWORK | PRACTICE | VKR | DEFENSE_CHAIR | STATE_EXAM_CHAIR
+  semesterId   String?
+  semester     Semester?   @relation(fields: [semesterId], references: [id], onUpdate: NoAction, onDelete: NoAction)
+  disciplineId String?
+  discipline   Discipline? @relation(fields: [disciplineId], references: [id], onUpdate: NoAction, onDelete: NoAction)
+  groupId      String?
+  group        Group?      @relation(fields: [groupId], references: [id], onUpdate: NoAction, onDelete: NoAction)
+  studentId    String?
+  student      Student?    @relation(fields: [studentId], references: [id], onUpdate: NoAction, onDelete: NoAction)
+  hours        Int?
+  notes        String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([teacherId])
+  @@index([teacherId, kind])
+}
+
+// ─── Справочник видов ВКР (редактируется заведующим) ───────────────────────
+model VkrType {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  isActive  Boolean  @default(true)
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// ─── Справочник председателей ГЭК (назначается приказом) ────────────────────
+model GekChair {
+  id        String   @id @default(cuid())
+  fullName  String
+  position  String?
+  year      Int?     // учебный год начала (например 2025 для 2025/2026)
+  notes     String?
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// ─── Уведомления для студентов (тост в углу) ────────────────────────────────
+model Notification {
+  id        String    @id @default(cuid())
+  userId    String
+  user      User      @relation("UserNotifications", fields: [userId], references: [id], onDelete: Cascade)
+  title     String
+  body      String?
+  link      String?
+  readAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId, readAt])
+}
+
+model PasswordResetToken {
+  id        String    @id @default(cuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId])
 }
 
 // ─── Учебная структура ─────────────────────────────────────────────────────
@@ -67,6 +146,7 @@ model Group {
   speciality String?                          // специальность / направление
   startYear  Int                              // год набора
   students   Student[]
+  teachingAssignments TeachingAssignment[]
 }
 
 model Student {
@@ -88,6 +168,7 @@ model Student {
   practices   Practice[]
   vkr         VKR?
   stateExams  StateExam[]
+  teachingAssignments TeachingAssignment[]
 }
 
 model Semester {
@@ -101,6 +182,7 @@ model Semester {
   assessments Assessment[]
   courseWorks CourseWork[]
   practices   Practice[]
+  teachingAssignments TeachingAssignment[]
 
   @@unique([course, number, academicYear])
 }
@@ -113,6 +195,7 @@ model Discipline {
 
   assessments Assessment[]
   courseWorks CourseWork[]
+  teachingAssignments TeachingAssignment[]
 }
 
 // ─── 2. Промежуточная аттестация ───────────────────────────────────────────
@@ -151,8 +234,9 @@ model CourseWork {
   disciplineId String
   discipline   Discipline @relation(fields: [disciplineId], references: [id])
   topic        String
-  grade        String
-  date         DateTime
+  grade        String?                            // опционально — препод может выдать тему, оценка ставится позже
+  date         DateTime?                          // дата выставления оценки; null = тема только выдана
+  assignedAt   DateTime?                          // дата выдачи темы
   teacherId    String
   teacher      User       @relation("CourseWorkTeacher", fields: [teacherId], references: [id], onUpdate: NoAction, onDelete: NoAction)
 
@@ -177,8 +261,8 @@ model Practice {
   creditUnits     Float?
   startDate       DateTime
   endDate         DateTime
-  grade           String
-  gradeDate       DateTime
+  grade           String?                         // опционально — практика может быть зафиксирована до выставления оценки
+  gradeDate       DateTime?
 
   // Руководитель от учреждения — пользователь системы (преподаватель)
   instSupervisorId String

@@ -17,7 +17,8 @@ export function formatDateLong(date: Date | string | null | undefined): string {
   return d.toLocaleDateString("ru-RU", { day: "numeric", month: "long", year: "numeric" });
 }
 
-export function gradeIsPassing(grade: string): boolean {
+export function gradeIsPassing(grade: string | null | undefined): boolean {
+  if (!grade) return false;
   const g = grade.trim().toLowerCase();
   if (g === "зачтено" || g === "зачет" || g === "зачёт") return true;
   if (g === "не зачтено" || g === "незачет" || g === "незачёт") return false;

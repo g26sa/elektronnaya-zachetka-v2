@@ -1,51 +1,55 @@
-import Link from "next/link";
 import { requireRole } from "@/lib/auth";
 import { prisma } from "@/lib/db";
-import { Card, CardContent } from "@/components/ui/card";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Button } from "@/components/ui/button";
-import { Eye } from "lucide-react";
+import { StudentsExplorer } from "@/components/StudentsExplorer";
+import { getTeacherStudentIds } from "@/lib/teacherPlan";
 
-export default async function StudentsPage() {
-  await requireRole("TEACHER", "HEAD");
+export default async function StudentsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ group?: string; speciality?: string; course?: string }>;
+}) {
+  const session = await requireRole("TEACHER", "HEAD");
+  const params = await searchParams;
+
+  // Преподаватель видит только привязанных к нему студентов (из плана)
+  const allowedStudentIds = session.role === "TEACHER"
+    ? await getTeacherStudentIds(session.userId)
+    : null;
+
   const students = await prisma.student.findMany({
-    include: { user: true, group: true, _count: { select: { assessments: true, courseWorks: true, practices: true } } },
+    where: allowedStudentIds ? { id: { in: allowedStudentIds } } : undefined,
+    include: {
+      user: { select: { fullName: true, email: true, isActive: true } },
+      group: { select: { name: true, speciality: true } },
+      _count: { select: { assessments: true, courseWorks: true, practices: true } },
+    },
     orderBy: [{ group: { name: "asc" } }, { user: { fullName: "asc" } }],
   });
 
+  const rows = students.map((s) => ({
+    id: s.id,
+    fullName: s.user.fullName,
+    email: s.user.email,
+    isActive: s.user.isActive,
+    recordBookNumber: s.recordBookNumber,
+    currentCourse: s.currentCourse,
+    group: s.group,
+    _count: s._count,
+  }));
+
   return (
     <div className="space-y-4">
-      <div><h1 className="text-2xl font-semibold">Студенты</h1></div>
-      <Card><CardContent className="p-0">
-        <Table className="data-table">
-          <TableHeader><TableRow>
-            <TableHead>ФИО</TableHead><TableHead>Группа</TableHead><TableHead>№ зач. книжки</TableHead>
-            <TableHead>Курс</TableHead><TableHead className="text-right">Оценок / Курс. / Практик</TableHead>
-            <TableHead className="text-right">Действия</TableHead>
-          </TableRow></TableHeader>
-          <TableBody>
-            {students.map((s) => (
-              <TableRow key={s.id}>
-                <TableCell>{s.user.fullName}</TableCell>
-                <TableCell>{s.group.name}</TableCell>
-                <TableCell>{s.recordBookNumber}</TableCell>
-                <TableCell>{s.currentCourse}</TableCell>
-                <TableCell className="text-right">
-                  {s._count.assessments} / {s._count.courseWorks} / {s._count.practices}
-                </TableCell>
-                <TableCell className="text-right">
-                  <Button asChild variant="outline" size="sm">
-                    <Link href={`/attestations?studentId=${s.id}`}>
-                      <Eye className="h-4 w-4 mr-2" />
-                      Открыть
-                    </Link>
-                  </Button>
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </CardContent></Card>
+      <div>
+        <h1 className="text-2xl font-semibold">Студенты</h1>
+      </div>
+      <StudentsExplorer
+        students={rows}
+        canEditProfile={session.role === "HEAD"}
+        initialGroup={params.group}
+        initialSpeciality={params.speciality}
+        initialCourse={params.course}
+        defaultLimit={session.role === "TEACHER" ? 10 : undefined}
+      />
     </div>
   );
 }

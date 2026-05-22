@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/dialog";
 import { assessmentSchema, type AssessmentInput } from "@/schemas/assessment";
 import { createAssessment, updateAssessment } from "@/app/(app)/attestations/actions";
+import { GradeSelect } from "./GradeSelect";
 
 export type RefOption = { id: string; label: string };
 
@@ -27,6 +28,7 @@ export function AssessmentForm({
   semesters,
   disciplines,
   teachers,
+  lockTeacher,
   onDone,
 }: {
   trigger: React.ReactNode;
@@ -36,6 +38,8 @@ export function AssessmentForm({
   semesters: RefOption[];
   disciplines: RefOption[];
   teachers: RefOption[];
+  /** Если true — поле «преподаватель» скрыто, значение фиксировано (для роли TEACHER). */
+  lockTeacher?: boolean;
   onDone?: () => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -99,22 +103,20 @@ export function AssessmentForm({
               { id: "GRADED_CREDIT", label: "Дифференцированный зачёт" },
             ]}
           />
-          <Field label="Оценка" error={errors.grade?.message}>
-            <Input placeholder="5 / 4 / 3 / зачтено" {...register("grade")} />
-          </Field>
+          <GradeSelect {...register("grade")} err={errors.grade?.message} />
           <Field label="Часы" error={errors.hours?.message}>
-            <Input type="number" min={0} {...register("hours")} />
-          </Field>
-          <Field label="З.е." error={errors.creditUnits?.message}>
-            <Input type="number" min={0} step={0.5} {...register("creditUnits")} />
+            <Input type="number" min={0} {...register("hours")} readOnly={lockTeacher} />
           </Field>
           <Field label="Дата" error={errors.date?.message}>
             <Input type="date" {...register("date")} />
           </Field>
-          <NativeSelect label="Преподаватель" error={errors.teacherId?.message} {...register("teacherId")} options={teachers} />
-          <Field label="№ ведомости" error={errors.protocolNumber?.message}>
-            <Input {...register("protocolNumber")} />
-          </Field>
+          {lockTeacher ? (
+            <input type="hidden" {...register("teacherId")} />
+          ) : (
+            <NativeSelect label="Преподаватель" error={errors.teacherId?.message} {...register("teacherId")} options={teachers} />
+          )}
+          <input type="hidden" {...register("creditUnits")} />
+          <input type="hidden" {...register("protocolNumber")} />
 
           {err && <p className="sm:col-span-2 text-sm text-destructive">{err}</p>}
 

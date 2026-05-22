@@ -14,7 +14,7 @@ function SubmitButton() {
   const { pending } = useFormStatus();
   return (
     <Button type="submit" className="w-full" disabled={pending}>
-      {pending ? "Отправка…" : "Отправить новый пароль на почту"}
+      {pending ? "Отправка…" : "Прислать ссылку на почту"}
     </Button>
   );
 }
@@ -31,8 +31,7 @@ export default function ForgotPasswordPage() {
           </div>
           <CardTitle className="text-xl">Восстановление пароля</CardTitle>
           <CardDescription>
-            Укажите email, привязанный к учётной записи.
-            Новый пароль будет сгенерирован и отправлен на этот адрес.
+            Укажите email, привязанный к учётной записи. Мы пришлём ссылку, по которой можно задать новый пароль.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -59,7 +58,10 @@ export default function ForgotPasswordPage() {
               )}
               <SubmitButton />
               <div className="text-center">
-                <Link href="/login" className="text-xs text-muted-foreground hover:text-foreground hover:underline inline-flex items-center">
+                <Link
+                  href="/login"
+                  className="text-xs text-muted-foreground hover:text-foreground hover:underline inline-flex items-center"
+                >
                   <ChevronLeft className="h-3 w-3 mr-1" />
                   Назад ко входу
                 </Link>

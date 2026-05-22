@@ -9,33 +9,71 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { AssessmentForm } from "@/components/forms/AssessmentForm";
 import { AssessmentRowActions } from "./AssessmentRowActions";
-import { RecordBookPage, type RecordBookSemester } from "@/components/documents/RecordBookPage";
+import { StudentAttestationExplorer } from "./StudentAttestationExplorer";
+import { LiveTableFilter } from "@/components/LiveTableFilter";
+import { TableSortEnhancer } from "@/components/TableSortEnhancer";
 import { evaluateAdmission } from "@/lib/admission";
+import { getTeacherStudentIds, getTeacherDisciplineIds, getTeacherPlan } from "@/lib/teacherPlan";
+import { TeacherPlanList, type PlanCardItem } from "./TeacherPlanList";
 import { assessmentTypeLabel, formatDate, gradeIsPassing } from "@/lib/utils";
 import { Plus, Printer, CheckCircle2, AlertTriangle } from "lucide-react";
 
 export default async function AttestationsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ studentId?: string; page?: string }>;
+  searchParams: Promise<{ studentId?: string }>;
 }) {
   const session = await requireSession();
   const params = await searchParams;
 
   // ─── Студент ─────────────────────────────────────────────────────────────
   if (session.role === "STUDENT") {
-    return <StudentView userId={session.userId} pageIndex={parseInt(params.page ?? "0", 10) || 0} />;
+    return <StudentView userId={session.userId} />;
   }
 
-  // ─── Преподаватель / Зав. отделением ────────────────────────────────────
+  // ─── Преподаватель: список карточек дисциплин из плана ───────────────────
+  if (session.role === "TEACHER") {
+    return <TeacherView teacherId={session.userId} />;
+  }
+
+  // ─── Зав. отделением: классическая таблица всех записей ─────────────────
   return <StaffView session={session} studentId={params.studentId ?? null} />;
 }
 
 // ──────────────────────────────────────────────────────────────────────────
-// СТУДЕНТ: «зачётная книжка» с перелистыванием по семестрам
+// ПРЕПОДАВАТЕЛЬ: список дисциплин из плана (ASSESSMENT)
 // ──────────────────────────────────────────────────────────────────────────
 
-async function StudentView({ userId, pageIndex }: { userId: string; pageIndex: number }) {
+async function TeacherView({ teacherId }: { teacherId: string }) {
+  const plan = await getTeacherPlan(teacherId);
+  const items: PlanCardItem[] = plan
+    .filter((p) => p.kind === "ASSESSMENT" && p.discipline && p.group && p.semester)
+    .map((p) => ({
+      id: p.id,
+      discipline: p.discipline!.name,
+      groupName: p.group!.name,
+      speciality: p.group!.speciality ?? "",
+      course: p.semester!.course,
+      semesterNumber: p.semester!.number,
+      academicYear: p.semester!.academicYear,
+      hours: p.hours,
+    }));
+
+  return (
+    <div className="space-y-4">
+      <div>
+        <h1 className="text-2xl font-semibold">Промежуточная аттестация</h1>
+      </div>
+      <TeacherPlanList items={items} />
+    </div>
+  );
+}
+
+// ──────────────────────────────────────────────────────────────────────────
+// СТУДЕНТ: зачётная книжка с фильтрами сверху, вертикальный стек семестров
+// ──────────────────────────────────────────────────────────────────────────
+
+async function StudentView({ userId }: { userId: string }) {
   const student = await prisma.student.findUnique({
     where: { userId },
     include: {
@@ -50,44 +88,32 @@ async function StudentView({ userId, pageIndex }: { userId: string; pageIndex: n
   });
   if (!student) return <p>Профиль студента не найден.</p>;
 
-  // Группируем оценки по семестрам, упорядоченным по учебному году + номеру
-  const map = new Map<string, RecordBookSemester>();
-  for (const a of student.assessments) {
-    const key = a.semester.id;
-    if (!map.has(key)) {
-      map.set(key, {
-        id: a.semester.id,
-        course: a.semester.course,
-        number: a.semester.number,
-        academicYear: a.semester.academicYear,
-        assessments: [],
-      });
-    }
-    map.get(key)!.assessments.push({
-      id: a.id,
-      discipline: a.discipline,
-      hours: a.hours,
-      creditUnits: a.creditUnits,
-      type: a.type,
-      grade: a.grade,
-      date: a.date,
-      teacher: a.teacher,
-    });
-  }
-  const semesters = Array.from(map.values()).sort((a, b) => {
-    if (a.academicYear !== b.academicYear) return a.academicYear.localeCompare(b.academicYear);
-    if (a.course !== b.course) return a.course - b.course;
-    return a.number - b.number;
-  });
-
   const admission = evaluateAdmission({
     assessments: student.assessments,
     courseWorks: student.courseWorks,
   });
 
+  // Передаём в клиентский Explorer в сериализуемом виде
+  const flatAssessments = student.assessments.map((a) => ({
+    id: a.id,
+    discipline: { name: a.discipline.name },
+    hours: a.hours,
+    creditUnits: a.creditUnits,
+    type: a.type,
+    grade: a.grade,
+    date: a.date.toISOString(),
+    teacher: { fullName: a.teacher.fullName },
+    semester: {
+      id: a.semester.id,
+      course: a.semester.course,
+      number: a.semester.number,
+      academicYear: a.semester.academicYear,
+    },
+  }));
+
   return (
     <div className="space-y-6">
-      <div className="flex items-end justify-between gap-3 flex-wrap">
+      <div className="flex items-end justify-between gap-3 flex-wrap no-print">
         <div>
           <h1 className="text-2xl font-semibold">Зачётная книжка</h1>
           <p className="text-muted-foreground text-sm">
@@ -103,7 +129,16 @@ async function StudentView({ userId, pageIndex }: { userId: string; pageIndex: n
       </div>
 
       {/* Статус допуска */}
-      <Card className={admission.kind === "admitted" ? "border-success/40" : admission.kind === "not_admitted" ? "border-destructive/40" : ""}>
+      <Card
+        className={
+          "no-print " +
+          (admission.kind === "admitted"
+            ? "border-success/40"
+            : admission.kind === "not_admitted"
+            ? "border-destructive/40"
+            : "")
+        }
+      >
         <CardContent className="p-4">
           {admission.kind === "admitted" && (
             <div className="flex items-center gap-3 text-success">
@@ -126,17 +161,16 @@ async function StudentView({ userId, pageIndex }: { userId: string; pageIndex: n
         </CardContent>
       </Card>
 
-      {semesters.length === 0 ? (
+      {flatAssessments.length === 0 ? (
         <Card><CardContent className="p-8 text-center text-muted-foreground">
           В зачётной книжке пока нет записей.
         </CardContent></Card>
       ) : (
-        <RecordBookPage
+        <StudentAttestationExplorer
           studentName={student.user.fullName}
           group={student.group.name}
           recordBookNumber={student.recordBookNumber}
-          semesters={semesters}
-          currentIndex={Math.max(0, Math.min(pageIndex, semesters.length - 1))}
+          assessments={flatAssessments}
         />
       )}
     </div>
@@ -154,13 +188,26 @@ async function StaffView({
   session: SessionPayload;
   studentId: string | null;
 }) {
+  const isTeacher = session.role === "TEACHER";
+  // Преподаватель видит только своих студентов и свои дисциплины — из плана.
+  const [allowedStudentIds, allowedDisciplineIds] = isTeacher
+    ? await Promise.all([
+        getTeacherStudentIds(session.userId),
+        getTeacherDisciplineIds(session.userId, "ASSESSMENT"),
+      ])
+    : [null, null];
+
   const [students, semesters, disciplines, teachers] = await Promise.all([
     prisma.student.findMany({
+      where: allowedStudentIds ? { id: { in: allowedStudentIds } } : undefined,
       include: { user: true, group: true },
       orderBy: [{ group: { name: "asc" } }, { user: { fullName: "asc" } }],
     }),
     prisma.semester.findMany({ orderBy: [{ academicYear: "asc" }, { course: "asc" }, { number: "asc" }] }),
-    prisma.discipline.findMany({ orderBy: { name: "asc" } }),
+    prisma.discipline.findMany({
+      where: allowedDisciplineIds ? { id: { in: allowedDisciplineIds } } : undefined,
+      orderBy: { name: "asc" },
+    }),
     prisma.user.findMany({ where: { role: { in: ["TEACHER", "HEAD"] } }, orderBy: { fullName: "asc" } }),
   ]);
 
@@ -172,15 +219,22 @@ async function StaffView({
   const disciplineOpts = disciplines.map((d) => ({ id: d.id, label: d.name }));
   const teacherOpts = teachers.map((t) => ({ id: t.id, label: t.fullName }));
 
+  // Преподаватель видит только записи, где он сам преподаватель.
+  // Все: фильтр по студенту, если выбран.
   const assessments = await prisma.assessment.findMany({
-    where: studentId ? { studentId } : undefined,
+    where: {
+      ...(studentId ? { studentId } : {}),
+      ...(isTeacher ? { teacherId: session.userId } : {}),
+    },
     include: {
       student: { include: { user: true, group: true } },
       semester: true,
       discipline: true,
       teacher: true,
     },
-    orderBy: [{ semester: { academicYear: "desc" } }, { semester: { number: "desc" } }, { date: "asc" }],
+    orderBy: [{ date: "desc" }],
+    // Без фильтра по студенту — отдаём только 10 последних
+    ...(studentId ? {} : { take: 10 }),
   });
 
   const studentName = studentId ? students.find((s) => s.id === studentId)?.user.fullName : "Все студенты";
@@ -207,6 +261,7 @@ async function StaffView({
               semesters={semesterOpts}
               disciplines={disciplineOpts}
               teachers={teacherOpts}
+              lockTeacher={session.role === "TEACHER"}
               initial={{ studentId: studentId ?? undefined, teacherId: session.userId }}
               trigger={<Button><Plus className="h-4 w-4 mr-2" />Добавить</Button>}
             />
@@ -233,18 +288,24 @@ async function StaffView({
         </CardContent>
       </Card>
 
+      <LiveTableFilter
+        targetSelector='table[data-search="assessments"] tbody tr'
+        placeholder="Поиск по дисциплине, семестру, оценке или преподавателю…"
+      />
+
+      <TableSortEnhancer targetSelector='table[data-search="assessments"]' />
       <Card>
         <CardContent className="p-0">
-          <Table className="data-table">
+          <Table className="data-table" data-search="assessments">
             <TableHeader>
               <TableRow>
-                <TableHead>Семестр</TableHead>
-                <TableHead>Дисциплина</TableHead>
+                <TableHead data-sort="text">Семестр</TableHead>
+                <TableHead data-sort="text">Дисциплина</TableHead>
                 <TableHead>Часы / з.е.</TableHead>
-                <TableHead>Тип</TableHead>
-                <TableHead>Оценка</TableHead>
-                <TableHead>Дата</TableHead>
-                <TableHead>Преподаватель</TableHead>
+                <TableHead data-sort="text">Тип</TableHead>
+                <TableHead data-sort="text">Оценка</TableHead>
+                <TableHead data-sort="date">Дата</TableHead>
+                <TableHead data-sort="text">Преподаватель</TableHead>
                 <TableHead className="text-right">Действия</TableHead>
               </TableRow>
             </TableHeader>
@@ -290,8 +351,9 @@ async function StaffView({
                         semesters={semesterOpts}
                         disciplines={disciplineOpts}
                         teachers={teacherOpts}
-                        canEdit={can(session, "assessment:edit")}
-                        canDelete={can(session, "assessment:delete")}
+                        canEdit={can(session, "assessment:edit") && (session.role !== "TEACHER" || a.teacherId === session.userId)}
+                        canDelete={can(session, "assessment:delete") && (session.role !== "TEACHER" || a.teacherId === session.userId)}
+                        lockTeacher={session.role === "TEACHER"}
                       />
                     </TableCell>
                   </TableRow>

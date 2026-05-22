@@ -28,3 +28,6 @@ Thumbs.db
 # Cookies/HTML от smoke-тестов
 cookies.txt
 login_resp.html
+
+# Локальные скрипты с персональными данными
+scripts/setup-samira.ts

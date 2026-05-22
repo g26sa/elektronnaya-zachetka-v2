@@ -7,6 +7,10 @@
  *   {{#each list}} ... {{/each}}
  *   {{#if value}} ... {{/if}}
  *   {{{html}}}                  — без экранирования (использовать с осторожностью)
+ *
+ * Подписи:
+ *   {{institution.headName}}            — директор учреждения (для общей шапки)
+ *   {{institution.departmentHeadName}}  — заведующий отделением (для подписей в учебных документах)
  */
 
 export const DEFAULT_TEMPLATES: { code: string; name: string; description: string; content: string }[] = [
@@ -18,6 +22,7 @@ export const DEFAULT_TEMPLATES: { code: string; name: string; description: strin
   <header class="text-center border-b border-black pb-3 mb-6">
     <div class="text-[12px] uppercase">{{institution.name}}</div>
     {{#if institution.address}}<div class="text-[11px]">{{institution.address}}</div>{{/if}}
+    {{#if institution.departmentName}}<div class="text-[11px]">{{institution.departmentName}}</div>{{/if}}
     <h1>Зачётная книжка № {{student.recordBookNumber}}</h1>
   </header>
 
@@ -32,16 +37,6 @@ export const DEFAULT_TEMPLATES: { code: string; name: string; description: strin
 
   <p class="text-[11px] text-right mt-4">Дата формирования: {{today}}</p>
 
-  <div class="signatures">
-    <div>
-      <p>{{institution.headTitle}}</p>
-      <div class="signature-line">{{institution.headName}}</div>
-    </div>
-    <div>
-      <p>Студент</p>
-      <div class="signature-line">{{student.fullName}}</div>
-    </div>
-  </div>
 </div>`,
   },
   {
@@ -51,6 +46,7 @@ export const DEFAULT_TEMPLATES: { code: string; name: string; description: strin
     content: `<div class="document">
   <header class="text-center border-b border-black pb-3 mb-6">
     <div class="text-[12px] uppercase">{{institution.name}}</div>
+    {{#if institution.departmentName}}<div class="text-[11px]">{{institution.departmentName}}</div>{{/if}}
     <h1>Сводная ведомость промежуточной аттестации</h1>
     <p class="text-[12px]">Студент: {{student.fullName}} · группа {{student.group}}</p>
     <p class="text-[12px]">Зачётная книжка № {{student.recordBookNumber}}</p>
@@ -79,16 +75,6 @@ export const DEFAULT_TEMPLATES: { code: string; name: string; description: strin
     </tbody>
   </table>
 
-  <div class="signatures">
-    <div>
-      <p>Заведующий отделением</p>
-      <div class="signature-line">{{institution.headName}}</div>
-    </div>
-    <div>
-      <p>Студент</p>
-      <div class="signature-line">{{student.fullName}}</div>
-    </div>
-  </div>
 </div>`,
   },
   {
@@ -98,6 +84,7 @@ export const DEFAULT_TEMPLATES: { code: string; name: string; description: strin
     content: `<div class="document">
   <header class="text-center border-b border-black pb-3 mb-6">
     <div class="text-[12px] uppercase">{{institution.name}}</div>
+    {{#if institution.departmentName}}<div class="text-[11px]">{{institution.departmentName}}</div>{{/if}}
     <h1>Отчёт о прохождении практики</h1>
     <p class="text-[12px]">{{student.fullName}} · группа {{student.group}}</p>
     <p class="text-[11px] text-right">Дата формирования: {{today}}</p>
@@ -128,16 +115,18 @@ export const DEFAULT_TEMPLATES: { code: string; name: string; description: strin
       {{/each}}
     </tbody>
   </table>
+
 </div>`,
   },
   {
     code: "GIA_REPORT",
-    name: "Отчёт по ГИА",
-    description: "ВКР, защита, гос. экзамены",
+    name: "Отчёт по ВКР",
+    description: "ВКР, защита, государственный экзамен",
     content: `<div class="document">
   <header class="text-center border-b border-black pb-3 mb-6">
     <div class="text-[12px] uppercase">{{institution.name}}</div>
-    <h1>Государственная итоговая аттестация</h1>
+    {{#if institution.departmentName}}<div class="text-[11px]">{{institution.departmentName}}</div>{{/if}}
+    <h1>Выпускная квалификационная работа</h1>
     <p class="text-[12px]">{{student.fullName}} · {{student.group}}</p>
     <p class="text-[11px] text-right">Дата формирования: {{today}}</p>
   </header>
@@ -146,6 +135,7 @@ export const DEFAULT_TEMPLATES: { code: string; name: string; description: strin
   <h2>Выпускная квалификационная работа</h2>
   <table>
     <tr><th class="w-1/3">Тема</th><td>{{vkr.topic}}</td></tr>
+    <tr><th>Вид</th><td>{{vkr.type}}</td></tr>
     <tr><th>Приказ об утверждении</th><td>{{vkr.approvedOrder}} от {{vkr.approvedDate}}</td></tr>
     <tr><th>Научный руководитель</th><td>{{vkr.supervisor}}</td></tr>
   </table>
@@ -182,6 +172,7 @@ export const DEFAULT_TEMPLATES: { code: string; name: string; description: strin
     </tbody>
   </table>
   {{/if}}
+
 </div>`,
   },
 ];

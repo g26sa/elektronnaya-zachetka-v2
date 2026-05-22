@@ -15,9 +15,6 @@ export default async function TemplatesPage() {
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-semibold">Шаблоны отчётов</h1>
-        <p className="text-muted-foreground">
-          Редактируется без программирования. Поддержка плейсхолдеров <code>{"{{path}}"}</code>, циклов <code>{"{{#each items}}…{{/each}}"}</code>, условий <code>{"{{#if x}}…{{/if}}"}</code>.
-        </p>
       </div>
 
       <div className="grid md:grid-cols-2 gap-4">

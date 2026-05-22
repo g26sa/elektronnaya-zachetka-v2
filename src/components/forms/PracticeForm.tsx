@@ -8,16 +8,18 @@ import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { practiceSchema, type PracticeInput } from "@/schemas/practice";
 import { createPractice, updatePractice } from "@/app/(app)/practice/actions";
+import { GradeSelect } from "./GradeSelect";
 
 type Opt = { id: string; label: string };
 
 export function PracticeForm({
-  trigger, initial, id, students, semesters, teachers,
+  trigger, initial, id, students, semesters, teachers, lockTeacher,
 }: {
   trigger: React.ReactNode;
   initial?: Partial<PracticeInput>;
   id?: string;
   students: Opt[]; semesters: Opt[]; teachers: Opt[];
+  lockTeacher?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [pending, startTransition] = useTransition();
@@ -61,21 +63,39 @@ export function PracticeForm({
         <form onSubmit={submit} className="grid sm:grid-cols-2 gap-4">
           <Sel label="Студент" {...register("studentId")} options={students} err={errors.studentId?.message} />
           <Sel label="Семестр" {...register("semesterId")} options={semesters} err={errors.semesterId?.message} />
-          <F label="Курс" err={errors.course?.message}><Input type="number" min={1} {...register("course")} /></F>
+          {lockTeacher ? (
+            <input type="hidden" {...register("course")} />
+          ) : (
+            <F label="Курс" err={errors.course?.message}><Input type="number" min={1} {...register("course")} /></F>
+          )}
           <Sel label="Вид"
             {...register("kind")}
             options={[{id:"EDUCATIONAL",label:"Учебная"},{id:"PRODUCTION",label:"Производственная"},{id:"PREDIPLOMA",label:"Преддипломная"}]}
             err={errors.kind?.message}/>
           <F label="Место" err={errors.place?.message} className="sm:col-span-2"><Input {...register("place")} /></F>
-          <F label="Часы" err={errors.hours?.message}><Input type="number" min={0} {...register("hours")} /></F>
-          <F label="З.е." err={errors.creditUnits?.message}><Input type="number" min={0} step={0.5} {...register("creditUnits")} /></F>
+          {lockTeacher ? (
+            <>
+              <input type="hidden" {...register("hours")} />
+              <input type="hidden" {...register("creditUnits")} />
+            </>
+          ) : (
+            <>
+              <F label="Часы" err={errors.hours?.message}><Input type="number" min={0} {...register("hours")} /></F>
+              <F label="З.е." err={errors.creditUnits?.message}><Input type="number" min={0} step={0.5} {...register("creditUnits")} /></F>
+            </>
+          )}
           <F label="Начало" err={errors.startDate?.message}><Input type="date" {...register("startDate")} /></F>
           <F label="Окончание" err={errors.endDate?.message}><Input type="date" {...register("endDate")} /></F>
-          <F label="Оценка" err={errors.grade?.message}><Input {...register("grade")} /></F>
+          <GradeSelect {...register("grade")} err={errors.grade?.message} includePass={false} />
           <F label="Дата оценки" err={errors.gradeDate?.message}><Input type="date" {...register("gradeDate")} /></F>
-          <Sel label="Руководитель от учреждения" {...register("instSupervisorId")} options={teachers} err={errors.instSupervisorId?.message} />
+          {lockTeacher ? (
+            <input type="hidden" {...register("instSupervisorId")} />
+          ) : (
+            <Sel label="Руководитель от учреждения" {...register("instSupervisorId")} options={teachers} err={errors.instSupervisorId?.message} />
+          )}
           <F label="Руководитель от организации (ФИО)"><Input {...register("orgSupervisorName")} /></F>
-          <F label="Должность от организации"><Input {...register("orgSupervisorPosition")} /></F>
+          {!lockTeacher && <F label="Должность от организации"><Input {...register("orgSupervisorPosition")} /></F>}
+          {lockTeacher && <input type="hidden" {...register("orgSupervisorPosition")} />}
           {err && <p className="sm:col-span-2 text-sm text-destructive">{err}</p>}
           <DialogFooter className="sm:col-span-2">
             <Button type="button" variant="outline" onClick={() => setOpen(false)}>Отмена</Button>

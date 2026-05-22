@@ -8,6 +8,10 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { StateExamForm } from "./StateExamForm";
 import { StateExamRowActions } from "./StateExamRowActions";
+import { LiveTableFilter } from "@/components/LiveTableFilter";
+import { TableSortEnhancer } from "@/components/TableSortEnhancer";
+import { TeacherStateExamView, type StateExamRow } from "./TeacherStateExamView";
+import { getTeacherPlan } from "@/lib/teacherPlan";
 import { admissionLabel, formatDate, gradeIsPassing } from "@/lib/utils";
 import { Plus } from "lucide-react";
 
@@ -20,6 +24,8 @@ export default async function StateExamPage({ searchParams }: { searchParams: Pr
     const me = await prisma.student.findUnique({ where: { userId: session.userId } });
     studentId = me?.id ?? null;
   }
+
+  if (session.role === "TEACHER") return <TeacherFlow teacherId={session.userId} />;
   const [students, chairs, items] = await Promise.all([
     prisma.student.findMany({ include: { user: true, group: true }, orderBy: { user: { fullName: "asc" } } }),
     prisma.user.findMany({ where: { role: { in: ["TEACHER", "HEAD"] } }, orderBy: { fullName: "asc" } }),
@@ -57,12 +63,20 @@ export default async function StateExamPage({ searchParams }: { searchParams: Pr
         </CardContent></Card>
       )}
 
+      {!isStudent && (
+        <LiveTableFilter
+          targetSelector='table[data-search="stateExam"] tbody tr'
+          placeholder="Поиск по студенту, названию, председателю…"
+        />
+      )}
+
+      {!isStudent && <TableSortEnhancer targetSelector='table[data-search="stateExam"]' />}
       <Card><CardContent className="p-0">
-        <Table className="data-table">
+        <Table className="data-table" data-search="stateExam">
           <TableHeader><TableRow>
-            {!isStudent && <TableHead>Студент</TableHead>}
-            <TableHead>Название</TableHead><TableHead>Допуск</TableHead><TableHead>Дата</TableHead>
-            <TableHead>Оценка</TableHead><TableHead>Председатель ГЭК</TableHead><TableHead>Протокол</TableHead>
+            {!isStudent && <TableHead data-sort="text">Студент</TableHead>}
+            <TableHead data-sort="text">Название</TableHead><TableHead data-sort="text">Допуск</TableHead><TableHead data-sort="date">Дата</TableHead>
+            <TableHead data-sort="text">Оценка</TableHead><TableHead data-sort="text">Председатель ГЭК</TableHead><TableHead data-sort="text">Протокол</TableHead>
             {!isStudent && <TableHead className="text-right">Действия</TableHead>}
           </TableRow></TableHeader>
           <TableBody>
@@ -100,6 +114,55 @@ export default async function StateExamPage({ searchParams }: { searchParams: Pr
           </TableBody>
         </Table>
       </CardContent></Card>
+    </div>
+  );
+}
+
+async function TeacherFlow({ teacherId }: { teacherId: string }) {
+  const plan = await getTeacherPlan(teacherId);
+  const planStudentIds = Array.from(
+    new Set(plan.filter((p) => p.studentId).map((p) => p.studentId!))
+  );
+  // плюс группы препода — все студенты этих групп тоже видны
+  const groupIds = Array.from(new Set(plan.filter((p) => p.groupId).map((p) => p.groupId!)));
+  const studentsFromGroups = groupIds.length > 0
+    ? await prisma.student.findMany({ where: { groupId: { in: groupIds } }, select: { id: true } })
+    : [];
+  const visibleStudentIds = Array.from(new Set([
+    ...planStudentIds,
+    ...studentsFromGroups.map((s) => s.id),
+  ]));
+
+  const items = visibleStudentIds.length === 0 ? [] : await prisma.stateExam.findMany({
+    where: { studentId: { in: visibleStudentIds } },
+    include: {
+      student: { include: { user: true, group: true } },
+      chair: true,
+    },
+    orderBy: { date: "desc" },
+  });
+
+  const rows: StateExamRow[] = items.map((e) => ({
+    id: e.id,
+    studentId: e.studentId,
+    studentName: e.student.user.fullName,
+    groupName: e.student.group.name,
+    groupSpeciality: e.student.group.speciality ?? "",
+    course: e.student.currentCourse,
+    name: e.name,
+    admission: e.admission,
+    admissionDate: e.admissionDate,
+    date: e.date,
+    grade: e.grade,
+    chairName: e.chair?.fullName ?? null,
+  }));
+
+  return (
+    <div className="space-y-4">
+      <div>
+        <h1 className="text-2xl font-semibold">Государственный экзамен</h1>
+      </div>
+      <TeacherStateExamView rows={rows} />
     </div>
   );
 }

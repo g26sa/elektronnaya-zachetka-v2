@@ -8,6 +8,8 @@ import { Badge } from "@/components/ui/badge";
 import { roleLabel } from "@/lib/utils";
 import { UserForm } from "./UserForm";
 import { ToggleActive } from "./ToggleActive";
+import { LiveTableFilter } from "@/components/LiveTableFilter";
+import { TableSortEnhancer } from "@/components/TableSortEnhancer";
 import { Plus, Pencil } from "lucide-react";
 
 export default async function UsersPage() {
@@ -23,11 +25,18 @@ export default async function UsersPage() {
         </div>
         <UserForm trigger={<Button><Plus className="h-4 w-4 mr-2" />Создать</Button>} />
       </div>
+
+      <LiveTableFilter
+        targetSelector='table[data-search="users"] tbody tr'
+        placeholder="Поиск по ФИО, email, роли или должности…"
+      />
+
+      <TableSortEnhancer targetSelector='table[data-search="users"]' />
       <Card><CardContent className="p-0">
-        <Table className="data-table">
+        <Table className="data-table" data-search="users">
           <TableHeader><TableRow>
-            <TableHead>ФИО</TableHead><TableHead>Email</TableHead><TableHead>Роль</TableHead>
-            <TableHead>Должность</TableHead><TableHead>Статус</TableHead>
+            <TableHead data-sort="text">ФИО</TableHead><TableHead data-sort="text">Email</TableHead><TableHead data-sort="text">Роль</TableHead>
+            <TableHead data-sort="text">Должность</TableHead><TableHead data-sort="text">Статус</TableHead>
             <TableHead className="text-right">Действия</TableHead>
           </TableRow></TableHeader>
           <TableBody>

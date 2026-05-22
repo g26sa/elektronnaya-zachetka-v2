@@ -1,12 +1,10 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { jwtVerify } from "jose";
+import { jwtSecret } from "@/lib/jwtSecret";
 
 const SESSION_COOKIE = "ezk_session";
-const secret = new TextEncoder().encode(
-  process.env.JWT_SECRET || "dev-only-please-change-in-production-32-chars-min"
-);
 
-const PUBLIC_PATHS = ["/login", "/forgot-password", "/api/health"];
+const PUBLIC_PATHS = ["/login", "/forgot-password", "/reset-password", "/api/health"];
 
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
@@ -29,7 +27,7 @@ export async function middleware(req: NextRequest) {
     return NextResponse.redirect(url);
   }
   try {
-    await jwtVerify(token, secret);
+    await jwtVerify(token, jwtSecret);
     return NextResponse.next();
   } catch {
     const url = req.nextUrl.clone();

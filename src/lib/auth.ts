@@ -3,12 +3,10 @@ import { redirect } from "next/navigation";
 import { SignJWT, jwtVerify } from "jose";
 import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/db";
+import { jwtSecret } from "@/lib/jwtSecret";
 import type { Role } from "@/types/enums";
 
 const SESSION_COOKIE = "ezk_session";
-const secret = new TextEncoder().encode(
-  process.env.JWT_SECRET || "dev-only-please-change-in-production-32-chars-min"
-);
 const expiresIn = process.env.JWT_EXPIRES_IN || "7d";
 
 export type SessionPayload = {
@@ -31,13 +29,27 @@ export async function signSession(payload: SessionPayload): Promise<string> {
     .setProtectedHeader({ alg: "HS256" })
     .setIssuedAt()
     .setExpirationTime(expiresIn)
-    .sign(secret);
+    .sign(jwtSecret);
 }
 
 export async function verifySession(token: string): Promise<SessionPayload | null> {
   try {
-    const { payload } = await jwtVerify(token, secret);
-    return payload as unknown as SessionPayload;
+    const { payload } = await jwtVerify(token, jwtSecret);
+    const jwt = payload as unknown as SessionPayload;
+    if (!jwt.userId) return null;
+
+    const user = await prisma.user.findUnique({
+      where: { id: jwt.userId },
+      select: { id: true, role: true, fullName: true, email: true, isActive: true },
+    });
+    if (!user?.isActive) return null;
+
+    return {
+      userId: user.id,
+      role: user.role as Role,
+      fullName: user.fullName,
+      email: user.email,
+    };
   } catch {
     return null;
   }
@@ -63,7 +75,12 @@ export async function getSession(): Promise<SessionPayload | null> {
   const store = await cookies();
   const token = store.get(SESSION_COOKIE)?.value;
   if (!token) return null;
-  return verifySession(token);
+
+  const session = await verifySession(token);
+  if (!session) {
+    await clearSessionCookie();
+  }
+  return session;
 }
 
 /**

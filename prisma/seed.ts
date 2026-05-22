@@ -34,6 +34,9 @@ async function main() {
       inn: "7700000000",
       headTitle: "Директор",
       headName: "Иванов Иван Иванович",
+      departmentName: "Отделение информационных технологий",
+      departmentHeadTitle: "Заведующий отделением",
+      departmentHeadName: "Иванова Ирина Игоревна",
     },
   });
 

@@ -35,6 +35,17 @@ export type Action =
   | "defense:edit"
   | "stateExam:view"
   | "stateExam:edit"
+  // Группы
+  | "group:view"
+  | "group:create"
+  | "group:edit"
+  | "group:delete"
+  // План преподавателя (что он ведёт)
+  | "plan:viewOwn"
+  | "plan:viewAny"
+  | "plan:edit"
+  // Справочники
+  | "reference:edit"
   // Шаблоны
   | "template:view"
   | "template:edit"
@@ -69,15 +80,21 @@ const MATRIX: Record<Role, Action[]> = {
     "assessment:viewAny",
     "assessment:create",
     "assessment:edit",
+    "assessment:delete",      // только свои — проверка на уровне action'а
     "courseWork:viewAny",
     "courseWork:create",
     "courseWork:edit",
+    "courseWork:delete",      // только свои
     "practice:viewAny",
     "practice:create",
     "practice:edit",
+    "practice:delete",        // только свои
     "vkr:view",
+    "vkr:edit",               // только привязанным студентам (проверка в action)
     "defense:view",
+    "defense:edit",           // только привязанным
     "stateExam:view",
+    "plan:viewOwn",
     "export:any",
   ],
   HEAD: [
@@ -101,6 +118,13 @@ const MATRIX: Record<Role, Action[]> = {
     "defense:edit",
     "stateExam:view",
     "stateExam:edit",
+    "group:view",
+    "group:create",
+    "group:edit",
+    "group:delete",
+    "plan:viewAny",
+    "plan:edit",
+    "reference:edit",
     "template:view",
     "template:edit",
     "institution:edit",

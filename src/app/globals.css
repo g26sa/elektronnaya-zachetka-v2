@@ -61,13 +61,35 @@ body {
     margin: 0;
     padding: var(--doc-padding);
   }
+  /* Все отчёты — строго A4 в книжной ориентации */
   @page {
-    size: A4;
+    size: A4 portrait;
     margin: 0;
+  }
+  /* Делим стопку «страниц» зачётной книжки на физические листы */
+  .printable-page {
+    page-break-after: always;
+    break-after: page;
+  }
+  .printable-page:last-child {
+    page-break-after: auto;
+    break-after: auto;
   }
 }
 
 /* Деловые таблицы интерфейса */
 .data-table th {
   @apply bg-secondary text-foreground font-semibold;
+}
+
+/* Подсветка строки/карточки, на которую перешли по hash из дашборда */
+tr:target,
+[id]:target {
+  background-color: rgba(252, 211, 77, 0.35);
+  animation: target-flash 1.5s ease-out;
+  scroll-margin-top: 80px;
+}
+@keyframes target-flash {
+  0%   { background-color: rgba(252, 211, 77, 0.7); }
+  100% { background-color: rgba(252, 211, 77, 0.35); }
 }

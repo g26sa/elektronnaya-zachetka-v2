@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { courseWorkSchema, type CourseWorkInput } from "@/schemas/coursework";
 import { createCourseWork, updateCourseWork } from "@/app/(app)/coursework/actions";
+import { GradeSelect } from "./GradeSelect";
 
 type Opt = { id: string; label: string };
 
@@ -20,6 +21,7 @@ export function CourseWorkForm({
   semesters,
   disciplines,
   teachers,
+  lockTeacher,
 }: {
   trigger: React.ReactNode;
   initial?: Partial<CourseWorkInput>;
@@ -28,6 +30,7 @@ export function CourseWorkForm({
   semesters: Opt[];
   disciplines: Opt[];
   teachers: Opt[];
+  lockTeacher?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [pending, startTransition] = useTransition();
@@ -68,9 +71,13 @@ export function CourseWorkForm({
           <Sel label="Студент" {...register("studentId")} options={students} err={errors.studentId?.message} />
           <Sel label="Семестр" {...register("semesterId")} options={semesters} err={errors.semesterId?.message} />
           <Sel label="Дисциплина" {...register("disciplineId")} options={disciplines} err={errors.disciplineId?.message} />
-          <Sel label="Преподаватель" {...register("teacherId")} options={teachers} err={errors.teacherId?.message} />
+          {lockTeacher ? (
+            <input type="hidden" {...register("teacherId")} />
+          ) : (
+            <Sel label="Преподаватель" {...register("teacherId")} options={teachers} err={errors.teacherId?.message} />
+          )}
           <F label="Тема" err={errors.topic?.message} className="sm:col-span-2"><Input {...register("topic")} /></F>
-          <F label="Оценка" err={errors.grade?.message}><Input {...register("grade")} /></F>
+          <GradeSelect {...register("grade")} err={errors.grade?.message} includePass={false} />
           <F label="Дата" err={errors.date?.message}><Input type="date" {...register("date")} /></F>
           {err && <p className="sm:col-span-2 text-sm text-destructive">{err}</p>}
           <DialogFooter className="sm:col-span-2">

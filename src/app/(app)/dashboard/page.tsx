@@ -5,6 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { evaluateAdmission } from "@/lib/admission";
+import { TeacherPlanView } from "@/components/TeacherPlanView";
 import { CheckCircle2, AlertTriangle, GraduationCap, Users, Clock, ClipboardList, BookOpen, Briefcase } from "lucide-react";
 
 export default async function DashboardPage() {
@@ -13,7 +14,21 @@ export default async function DashboardPage() {
   if (session.role === "STUDENT") {
     return <StudentDashboard userId={session.userId} />;
   }
+  if (session.role === "TEACHER") {
+    return <TeacherDashboard userId={session.userId} fullName={session.fullName} />;
+  }
   return <StaffDashboard role={session.role} />;
+}
+
+async function TeacherDashboard({ userId, fullName }: { userId: string; fullName: string }) {
+  return (
+    <div className="space-y-6">
+      <div>
+        <h1 className="text-2xl font-semibold">{fullName}</h1>
+      </div>
+      <TeacherPlanView teacherId={userId} />
+    </div>
+  );
 }
 
 async function StudentDashboard({ userId }: { userId: string }) {
@@ -22,7 +37,7 @@ async function StudentDashboard({ userId }: { userId: string }) {
     include: {
       user: true,
       group: true,
-      assessments: { include: { discipline: true } },
+      assessments: { include: { discipline: true, semester: true } },
       courseWorks: { include: { discipline: true } },
     },
   });
@@ -37,9 +52,22 @@ async function StudentDashboard({ userId }: { userId: string }) {
     );
   }
 
+  // Упорядочиваем семестры так же, как их выводит RecordBookPage,
+  // чтобы pageIndex в admission соответствовал ?page=N в зачётной книжке.
+  const semestersByKey = new Map<string, { id: string; course: number; number: number; academicYear: string }>();
+  for (const a of student.assessments) semestersByKey.set(a.semester.id, a.semester);
+  const orderedSemesterIds = Array.from(semestersByKey.values())
+    .sort((a, b) => {
+      if (a.academicYear !== b.academicYear) return a.academicYear.localeCompare(b.academicYear);
+      if (a.course !== b.course) return a.course - b.course;
+      return a.number - b.number;
+    })
+    .map((s) => s.id);
+
   const status = evaluateAdmission({
     assessments: student.assessments,
     courseWorks: student.courseWorks,
+    orderedSemesterIds,
   });
 
   return (
@@ -72,19 +100,30 @@ async function StudentDashboard({ userId }: { userId: string }) {
               <div className="flex-1 min-w-0">
                 <div className="text-2xl font-semibold text-destructive">Не допущен</div>
                 <p className="text-sm text-muted-foreground mt-1 mb-3">
-                  Имеются непроходные оценки. Допуск возможен только при сдаче всех аттестаций
-                  и курсовых работ на 3, 4 или 5.
+                  Имеются непроходные оценки.
                 </p>
                 <ul className="text-sm space-y-1">
-                  {status.failed.map((f, i) => (
-                    <li key={i} className="flex items-center gap-2">
-                      <Badge variant="destructive">{f.grade}</Badge>
-                      <span>{f.discipline}</span>
-                      <span className="text-xs text-muted-foreground">
-                        ({f.type === "assessment" ? "аттестация" : "курсовая"})
-                      </span>
-                    </li>
-                  ))}
+                  {status.failed.map((f, i) => {
+                    const href =
+                      f.type === "coursework"
+                        ? `/coursework#${f.recordId}`
+                        : `/attestations?page=${f.pageIndex ?? 0}#${f.recordId}`;
+                    return (
+                      <li key={i}>
+                        <Link
+                          href={href}
+                          className="inline-flex items-center gap-2 rounded px-1 -mx-1 hover:bg-destructive/10 transition-colors"
+                          title="Перейти к записи"
+                        >
+                          <Badge variant="destructive">{f.grade}</Badge>
+                          <span>{f.discipline}</span>
+                          <span className="text-xs text-muted-foreground">
+                            ({f.type === "assessment" ? "аттестация" : "курсовая"})
+                          </span>
+                        </Link>
+                      </li>
+                    );
+                  })}
                 </ul>
               </div>
             </div>
@@ -117,7 +156,7 @@ async function StudentDashboard({ userId }: { userId: string }) {
       <div className="grid sm:grid-cols-3 gap-4">
         <QuickLink href="/attestations" title="Зачётная книжка" hint="Промежуточная аттестация" />
         <QuickLink href="/coursework" title="Курсовые работы" hint="Темы и оценки" />
-        <QuickLink href="/gia" title="ГИА" hint="Тема ВКР и защита" />
+        <QuickLink href="/gia" title="Выпускная квалификационная работа" hint="Тема и защита" />
       </div>
     </div>
   );
