@@ -10,7 +10,6 @@ export default async function InstitutionPage() {
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-semibold">Реквизиты учреждения</h1>
-        <p className="text-muted-foreground text-sm">Используются в шапке всех документов и отчётов</p>
       </div>
       <Card>
         <CardHeader><CardTitle className="text-base">Данные учреждения</CardTitle></CardHeader>

@@ -1,7 +1,7 @@
 import { requireRole } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { PrintBar } from "@/components/documents/PrintBar";
-import { DocumentHeader } from "@/components/documents/DocumentHeader";
+import { DocumentHeader, DocumentSignatures } from "@/components/documents/DocumentHeader";
 import { formatDate } from "@/lib/utils";
 
 /**
@@ -97,12 +97,17 @@ export default async function CourseworkReportPage({
         )}
 
         <p className="text-[11px] mt-4">
-          Преподаватель: {session.fullName}.
-          {sp.speciality && ` Специальность: «${sp.speciality}».`}
-          {sp.group && ` Группа: ${sp.group}.`}
-          {sp.discipline && ` Дисциплина: «${sp.discipline}».`}
-          {sp.semester && ` ${sp.semester} семестр.`}
+          {sp.speciality && `Специальность: «${sp.speciality}». `}
+          {sp.group && `Группа: ${sp.group}. `}
+          {sp.discipline && `Дисциплина: «${sp.discipline}». `}
+          {sp.semester && `${sp.semester} семестр. `}
+          Всего: {filtered.length}.
         </p>
+
+        <DocumentSignatures
+          left={{ title: session.role === "HEAD" ? "Заведующий отделением" : "Преподаватель", name: session.fullName }}
+          right={{ title: "Дата" }}
+        />
       </div>
     </>
   );

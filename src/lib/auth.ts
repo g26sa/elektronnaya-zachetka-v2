@@ -76,11 +76,9 @@ export async function getSession(): Promise<SessionPayload | null> {
   const token = store.get(SESSION_COOKIE)?.value;
   if (!token) return null;
 
-  const session = await verifySession(token);
-  if (!session) {
-    await clearSessionCookie();
-  }
-  return session;
+  // Не вызываем clearSessionCookie здесь: getSession вызывается из Server Components,
+  // а cookies() можно менять только в Server Action или Route Handler.
+  return verifySession(token);
 }
 
 /**

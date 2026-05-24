@@ -1,7 +1,7 @@
 import { requireRole } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { PrintBar } from "@/components/documents/PrintBar";
-import { DocumentHeader } from "@/components/documents/DocumentHeader";
+import { DocumentHeader, DocumentSignatures } from "@/components/documents/DocumentHeader";
 import { admissionLabel, formatDate } from "@/lib/utils";
 
 export default async function DefenseReportPage({
@@ -85,6 +85,11 @@ export default async function DefenseReportPage({
             </tbody>
           </table>
         )}
+        <p className="text-[11px] mt-3">Всего: {rows.length}.</p>
+        <DocumentSignatures
+          left={{ title: session.role === "HEAD" ? "Заведующий отделением" : "Преподаватель", name: session.fullName }}
+          right={{ title: "Дата" }}
+        />
       </div>
     </>
   );

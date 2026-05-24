@@ -15,17 +15,15 @@ export default async function DashboardPage() {
     return <StudentDashboard userId={session.userId} />;
   }
   if (session.role === "TEACHER") {
-    return <TeacherDashboard userId={session.userId} fullName={session.fullName} />;
+    return <TeacherDashboard userId={session.userId} />;
   }
   return <StaffDashboard role={session.role} />;
 }
 
-async function TeacherDashboard({ userId, fullName }: { userId: string; fullName: string }) {
+async function TeacherDashboard({ userId }: { userId: string }) {
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold">{fullName}</h1>
-      </div>
+      <h1 className="text-2xl font-semibold">Главная</h1>
       <TeacherPlanView teacherId={userId} />
     </div>
   );
@@ -39,6 +37,7 @@ async function StudentDashboard({ userId }: { userId: string }) {
       group: true,
       assessments: { include: { discipline: true, semester: true } },
       courseWorks: { include: { discipline: true } },
+      _count: { select: { practices: true } },
     },
   });
   if (!student) {
@@ -148,7 +147,7 @@ async function StudentDashboard({ userId }: { userId: string }) {
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <MiniStat icon={ClipboardList} label="Аттестаций" value={student.assessments.length} />
         <MiniStat icon={BookOpen} label="Курсовых" value={student.courseWorks.length} />
-        <MiniStat icon={Briefcase} label="Практик" value={0} hint="см. раздел" />
+        <MiniStat icon={Briefcase} label="Практик" value={student._count.practices} />
         <MiniStat icon={GraduationCap} label="Курс" value={student.currentCourse} />
       </div>
 
@@ -163,27 +162,46 @@ async function StudentDashboard({ userId }: { userId: string }) {
 }
 
 async function StaffDashboard({ role }: { role: "TEACHER" | "HEAD" }) {
-  const [students, totalAssessments, openVkr] = await Promise.all([
+  const [students, totalAssessments, openVkr, teachers] = await Promise.all([
     prisma.student.count(),
     prisma.assessment.count(),
     prisma.vKR.count({ where: { defense: { is: null } } }),
+    prisma.user.count({ where: { role: "TEACHER", isActive: true } }),
   ]);
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-semibold">Главная</h1>
-        <p className="text-muted-foreground">{role === "HEAD" ? "Заведующий отделением" : "Преподаватель"}</p>
+        <p className="text-muted-foreground">
+          {role === "HEAD" ? "Заведующий отделением" : "Преподаватель"} · сводка по учреждению
+        </p>
       </div>
-      <div className="grid sm:grid-cols-3 gap-4">
+      <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard icon={Users} label="Студентов" value={students} />
-        <StatCard icon={GraduationCap} label="Оценок выставлено" value={totalAssessments} />
+        <StatCard icon={GraduationCap} label="Оценок в системе" value={totalAssessments} />
         <StatCard icon={Clock} label="ВКР без защиты" value={openVkr} />
+        {role === "HEAD" && <StatCard icon={Users} label="Преподавателей" value={teachers} />}
       </div>
-      <div className="grid sm:grid-cols-3 gap-4">
+      <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
         <QuickLink href="/students" title="Студенты" hint="Список и зачётные книжки" />
         <QuickLink href="/attestations" title="Аттестации" hint="Внести оценки" />
-        {role === "HEAD" && <QuickLink href="/templates" title="Шаблоны" hint="Редактирование без кода" />}
+        {role === "HEAD" ? (
+          <>
+            <QuickLink href="/plan" title="Планы преподавателей" hint="Назначить дисциплины и нагрузку" />
+            <QuickLink href="/groups" title="Группы" hint="Учебные группы" />
+            <QuickLink href="/users" title="Пользователи" hint="Роли и доступ" />
+            <QuickLink href="/institution" title="Учреждение" hint="Реквизиты и логотип" />
+            <QuickLink href="/templates" title="Шаблоны" hint="Печатные формы" />
+          </>
+        ) : (
+          <QuickLink href="/plan" title="Мой план" hint="Ваши дисциплины по семестрам" />
+        )}
       </div>
+      {role === "HEAD" && (
+        <p className="text-xs text-muted-foreground">
+          Планы преподавателей формируются в разделе «Планы преподавателей» — после назначений преподаватели увидят дисциплины на своей главной.
+        </p>
+      )}
     </div>
   );
 }

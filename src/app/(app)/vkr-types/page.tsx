@@ -16,9 +16,6 @@ export default async function VkrTypesPage() {
       <div className="flex items-end justify-between gap-3 flex-wrap">
         <div>
           <h1 className="text-2xl font-semibold">Виды ВКР</h1>
-          <p className="text-muted-foreground text-sm">
-            Справочник видов выпускных квалификационных работ. Используется в форме назначения темы ВКР.
-          </p>
         </div>
         <VkrTypeForm
           trigger={<Button><Plus className="h-4 w-4 mr-2" />Добавить</Button>}

@@ -71,6 +71,7 @@ export async function createPlanItem(input: unknown) {
   await audit({ userId: session.userId, action: "CREATE", entity: "TeachingAssignment", entityId: created.id, after: created });
   revalidatePath("/plan");
   revalidatePath("/my-plan");
+  revalidatePath("/dashboard");
 }
 
 export async function updatePlanItem(id: string, input: unknown) {
@@ -82,6 +83,7 @@ export async function updatePlanItem(id: string, input: unknown) {
   await audit({ userId: session.userId, action: "UPDATE", entity: "TeachingAssignment", entityId: id, before, after: updated });
   revalidatePath("/plan");
   revalidatePath("/my-plan");
+  revalidatePath("/dashboard");
 }
 
 export async function deletePlanItem(id: string) {
@@ -92,4 +94,5 @@ export async function deletePlanItem(id: string) {
   await audit({ userId: session.userId, action: "DELETE", entity: "TeachingAssignment", entityId: id, before });
   revalidatePath("/plan");
   revalidatePath("/my-plan");
+  revalidatePath("/dashboard");
 }

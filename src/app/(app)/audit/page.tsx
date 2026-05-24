@@ -22,9 +22,6 @@ export default async function AuditPage() {
     <div className="space-y-4">
       <div>
         <h1 className="text-2xl font-semibold">История изменений</h1>
-        <p className="text-muted-foreground text-sm">
-          {session.role === "HEAD" ? "Последние 500 событий по всем пользователям" : "Ваши последние 500 событий"}
-        </p>
       </div>
       <Card><CardContent className="p-0">
         <Table className="data-table">

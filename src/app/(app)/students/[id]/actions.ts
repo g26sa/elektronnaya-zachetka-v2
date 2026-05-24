@@ -16,11 +16,16 @@ export async function updateStudentProfile(studentId: string, input: unknown) {
   const student = await prisma.student.findUnique({ where: { id: studentId }, include: { user: true } });
   if (!student) throw new Error("Студент не найден");
 
-  // User-данные
+  // Определяем причину архивации
+  const expelled = !!(d.expulsionDate && d.expulsionOrder);
+  const onLeave = !!(d.academicLeaveDate && d.academicLeaveOrder);
+  const archiveReason = expelled ? "EXPULSION" : onLeave ? "ACADEMIC_LEAVE" : null;
+  const shouldDeactivate = expelled || onLeave;
+
   const userData: Record<string, unknown> = {
     email: d.email.toLowerCase(),
     fullName: d.fullName,
-    isActive: d.isActive ?? true,
+    isActive: shouldDeactivate ? false : (d.isActive ?? true),
   };
   if (d.newPassword && d.newPassword.length > 0) {
     userData.passwordHash = await hashPassword(d.newPassword);
@@ -28,7 +33,6 @@ export async function updateStudentProfile(studentId: string, input: unknown) {
 
   await prisma.user.update({ where: { id: student.userId }, data: userData });
 
-  // Student-данные
   const updated = await prisma.student.update({
     where: { id: studentId },
     data: {
@@ -39,6 +43,9 @@ export async function updateStudentProfile(studentId: string, input: unknown) {
       enrollmentOrder: d.enrollmentOrder ?? null,
       expulsionDate: d.expulsionDate ? new Date(d.expulsionDate) : null,
       expulsionOrder: d.expulsionOrder ?? null,
+      academicLeaveDate: d.academicLeaveDate ? new Date(d.academicLeaveDate) : null,
+      academicLeaveOrder: d.academicLeaveOrder ?? null,
+      archiveReason,
       currentCourse: d.currentCourse,
     },
   });
@@ -61,9 +68,7 @@ export async function deleteStudent(studentId: string) {
   assertCan(session, "student:edit");
   const student = await prisma.student.findUnique({ where: { id: studentId }, include: { user: true } });
   if (!student) return;
-  // Каскадно удаляем студента (Assessment/CourseWork/Practice/VKR прицепится по схеме)
   await prisma.student.delete({ where: { id: studentId } });
-  // и затем пользователя
   await prisma.user.delete({ where: { id: student.userId } });
   await audit({
     userId: session.userId, action: "DELETE", entity: "Student", entityId: studentId,

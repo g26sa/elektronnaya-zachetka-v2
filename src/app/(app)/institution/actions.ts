@@ -5,6 +5,7 @@ import { getSession } from "@/lib/auth";
 import { assertCan } from "@/lib/rbac";
 import { audit } from "@/lib/audit";
 import { z } from "zod";
+import { deleteLogoFileIfLocal } from "@/lib/institution-logo";
 
 const schema = z.object({
   id: z.string().optional(),
@@ -46,5 +47,16 @@ export async function saveInstitution(input: unknown) {
     result = await prisma.institution.create({ data: payload });
   }
   await audit({ userId: session.userId, action: before ? "UPDATE" : "CREATE", entity: "Institution", entityId: result.id, before, after: result });
+  revalidatePath("/institution");
+}
+
+export async function deleteLogo() {
+  const session = await getSession();
+  assertCan(session, "institution:edit");
+  const inst = await prisma.institution.findFirst();
+  if (!inst?.logoUrl) return;
+  await deleteLogoFileIfLocal(inst.logoUrl);
+  await prisma.institution.update({ where: { id: inst.id }, data: { logoUrl: null } });
+  revalidatePath("/");
   revalidatePath("/institution");
 }

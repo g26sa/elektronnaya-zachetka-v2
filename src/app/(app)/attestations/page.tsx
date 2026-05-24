@@ -10,39 +10,32 @@ import { Badge } from "@/components/ui/badge";
 import { AssessmentForm } from "@/components/forms/AssessmentForm";
 import { AssessmentRowActions } from "./AssessmentRowActions";
 import { StudentAttestationExplorer } from "./StudentAttestationExplorer";
-import { LiveTableFilter } from "@/components/LiveTableFilter";
-import { TableSortEnhancer } from "@/components/TableSortEnhancer";
 import { evaluateAdmission } from "@/lib/admission";
 import { getTeacherStudentIds, getTeacherDisciplineIds, getTeacherPlan } from "@/lib/teacherPlan";
 import { TeacherPlanList, type PlanCardItem } from "./TeacherPlanList";
 import { assessmentTypeLabel, formatDate, gradeIsPassing } from "@/lib/utils";
-import { Plus, Printer, CheckCircle2, AlertTriangle } from "lucide-react";
+import { CheckCircle2, AlertTriangle, Printer, Plus } from "lucide-react";
 
 export default async function AttestationsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ studentId?: string }>;
+  searchParams: Promise<{
+    studentId?: string;
+    speciality?: string;
+    course?: string;
+    group?: string;
+    discipline?: string;
+    dateFrom?: string;
+    dateTo?: string;
+  }>;
 }) {
   const session = await requireSession();
   const params = await searchParams;
 
-  // ─── Студент ─────────────────────────────────────────────────────────────
-  if (session.role === "STUDENT") {
-    return <StudentView userId={session.userId} />;
-  }
-
-  // ─── Преподаватель: список карточек дисциплин из плана ───────────────────
-  if (session.role === "TEACHER") {
-    return <TeacherView teacherId={session.userId} />;
-  }
-
-  // ─── Зав. отделением: классическая таблица всех записей ─────────────────
-  return <StaffView session={session} studentId={params.studentId ?? null} />;
+  if (session.role === "STUDENT") return <StudentView userId={session.userId} />;
+  if (session.role === "TEACHER") return <TeacherView teacherId={session.userId} />;
+  return <StaffView session={session} params={params} />;
 }
-
-// ──────────────────────────────────────────────────────────────────────────
-// ПРЕПОДАВАТЕЛЬ: список дисциплин из плана (ASSESSMENT)
-// ──────────────────────────────────────────────────────────────────────────
 
 async function TeacherView({ teacherId }: { teacherId: string }) {
   const plan = await getTeacherPlan(teacherId);
@@ -61,17 +54,11 @@ async function TeacherView({ teacherId }: { teacherId: string }) {
 
   return (
     <div className="space-y-4">
-      <div>
-        <h1 className="text-2xl font-semibold">Промежуточная аттестация</h1>
-      </div>
+      <h1 className="text-2xl font-semibold">Промежуточная аттестация</h1>
       <TeacherPlanList items={items} />
     </div>
   );
 }
-
-// ──────────────────────────────────────────────────────────────────────────
-// СТУДЕНТ: зачётная книжка с фильтрами сверху, вертикальный стек семестров
-// ──────────────────────────────────────────────────────────────────────────
 
 async function StudentView({ userId }: { userId: string }) {
   const student = await prisma.student.findUnique({
@@ -93,7 +80,6 @@ async function StudentView({ userId }: { userId: string }) {
     courseWorks: student.courseWorks,
   });
 
-  // Передаём в клиентский Explorer в сериализуемом виде
   const flatAssessments = student.assessments.map((a) => ({
     id: a.id,
     discipline: { name: a.discipline.name },
@@ -116,29 +102,16 @@ async function StudentView({ userId }: { userId: string }) {
       <div className="flex items-end justify-between gap-3 flex-wrap no-print">
         <div>
           <h1 className="text-2xl font-semibold">Зачётная книжка</h1>
-          <p className="text-muted-foreground text-sm">
-            Промежуточная аттестация · {student.user.fullName}
-          </p>
+          <p className="text-muted-foreground text-sm">Промежуточная аттестация · {student.user.fullName}</p>
         </div>
         <Button asChild variant="outline">
           <Link href={`/print/attestation/${student.id}`} target="_blank">
-            <Printer className="h-4 w-4 mr-2" />
-            Печать / PDF
+            <Printer className="h-4 w-4 mr-2" />Печать / PDF
           </Link>
         </Button>
       </div>
 
-      {/* Статус допуска */}
-      <Card
-        className={
-          "no-print " +
-          (admission.kind === "admitted"
-            ? "border-success/40"
-            : admission.kind === "not_admitted"
-            ? "border-destructive/40"
-            : "")
-        }
-      >
+      <Card className={"no-print " + (admission.kind === "admitted" ? "border-success/40" : admission.kind === "not_admitted" ? "border-destructive/40" : "")}>
         <CardContent className="p-4">
           {admission.kind === "admitted" && (
             <div className="flex items-center gap-3 text-success">
@@ -150,9 +123,7 @@ async function StudentView({ userId }: { userId: string }) {
             <div className="flex items-center gap-3 text-destructive">
               <AlertTriangle className="h-5 w-5" />
               <div className="font-semibold">Не допущен</div>
-              <span className="text-sm text-muted-foreground">
-                — имеются непроходные оценки ({admission.failed.length})
-              </span>
+              <span className="text-sm text-muted-foreground">— имеются непроходные оценки ({admission.failed.length})</span>
             </div>
           )}
           {admission.kind === "no_data" && (
@@ -162,9 +133,7 @@ async function StudentView({ userId }: { userId: string }) {
       </Card>
 
       {flatAssessments.length === 0 ? (
-        <Card><CardContent className="p-8 text-center text-muted-foreground">
-          В зачётной книжке пока нет записей.
-        </CardContent></Card>
+        <Card><CardContent className="p-8 text-center text-muted-foreground">В зачётной книжке пока нет записей.</CardContent></Card>
       ) : (
         <StudentAttestationExplorer
           studentName={student.user.fullName}
@@ -177,19 +146,22 @@ async function StudentView({ userId }: { userId: string }) {
   );
 }
 
-// ──────────────────────────────────────────────────────────────────────────
-// СОТРУДНИКИ: обычная таблица с CRUD
-// ──────────────────────────────────────────────────────────────────────────
-
 async function StaffView({
   session,
-  studentId,
+  params,
 }: {
   session: SessionPayload;
-  studentId: string | null;
+  params: {
+    studentId?: string;
+    speciality?: string;
+    course?: string;
+    group?: string;
+    discipline?: string;
+    dateFrom?: string;
+    dateTo?: string;
+  };
 }) {
   const isTeacher = session.role === "TEACHER";
-  // Преподаватель видит только своих студентов и свои дисциплины — из плана.
   const [allowedStudentIds, allowedDisciplineIds] = isTeacher
     ? await Promise.all([
         getTeacherStudentIds(session.userId),
@@ -197,13 +169,12 @@ async function StaffView({
       ])
     : [null, null];
 
-  const [students, semesters, disciplines, teachers] = await Promise.all([
+  const [allStudents, disciplines, teachers] = await Promise.all([
     prisma.student.findMany({
       where: allowedStudentIds ? { id: { in: allowedStudentIds } } : undefined,
       include: { user: true, group: true },
       orderBy: [{ group: { name: "asc" } }, { user: { fullName: "asc" } }],
     }),
-    prisma.semester.findMany({ orderBy: [{ academicYear: "asc" }, { course: "asc" }, { number: "asc" }] }),
     prisma.discipline.findMany({
       where: allowedDisciplineIds ? { id: { in: allowedDisciplineIds } } : undefined,
       orderBy: { name: "asc" },
@@ -211,21 +182,45 @@ async function StaffView({
     prisma.user.findMany({ where: { role: { in: ["TEACHER", "HEAD"] } }, orderBy: { fullName: "asc" } }),
   ]);
 
-  const studentOpts = students.map((s) => ({ id: s.id, label: `${s.user.fullName} (${s.group.name})` }));
-  const semesterOpts = semesters.map((s) => ({
-    id: s.id,
-    label: `${s.academicYear}, ${s.course} курс, ${s.number} семестр`,
-  }));
+  // Каскадные фильтры для студентов
+  let filteredStudents = allStudents;
+  if (params.speciality) filteredStudents = filteredStudents.filter((s) => s.group.speciality === params.speciality);
+  if (params.course) filteredStudents = filteredStudents.filter((s) => String(s.currentCourse) === params.course);
+  if (params.group) filteredStudents = filteredStudents.filter((s) => s.group.name === params.group);
+
+  const studentOpts = allStudents.map((s) => ({ id: s.id, label: `${s.user.fullName} (${s.group.name})` }));
   const disciplineOpts = disciplines.map((d) => ({ id: d.id, label: d.name }));
   const teacherOpts = teachers.map((t) => ({ id: t.id, label: t.fullName }));
 
-  // Преподаватель видит только записи, где он сам преподаватель.
-  // Все: фильтр по студенту, если выбран.
+  // Уникальные значения для фильтров
+  const specialities = Array.from(new Set(allStudents.map((s) => s.group.speciality).filter(Boolean) as string[])).sort();
+  const courses = Array.from(new Set(allStudents.map((s) => s.currentCourse))).sort((a, b) => a - b);
+  const groups = Array.from(new Set(
+    (params.speciality || params.course
+      ? filteredStudents
+      : allStudents
+    ).map((s) => s.group.name)
+  )).sort();
+
+  const filteredStudentIds = filteredStudents.map((s) => s.id);
+
+  // Строим условие запроса
+  const where: Record<string, unknown> = {
+    ...(params.studentId ? { studentId: params.studentId } : filteredStudentIds.length !== allStudents.length ? { studentId: { in: filteredStudentIds } } : {}),
+    ...(isTeacher ? { teacherId: session.userId } : {}),
+    ...(params.discipline ? { discipline: { name: params.discipline } } : {}),
+    ...(params.dateFrom || params.dateTo ? {
+      date: {
+        ...(params.dateFrom ? { gte: new Date(params.dateFrom) } : {}),
+        ...(params.dateTo ? { lte: new Date(params.dateTo + "T23:59:59") } : {}),
+      }
+    } : {}),
+  };
+
+  const hasFilters = !!(params.studentId || params.speciality || params.course || params.group || params.discipline || params.dateFrom || params.dateTo);
+
   const assessments = await prisma.assessment.findMany({
-    where: {
-      ...(studentId ? { studentId } : {}),
-      ...(isTeacher ? { teacherId: session.userId } : {}),
-    },
+    where,
     include: {
       student: { include: { user: true, group: true } },
       semester: true,
@@ -233,99 +228,115 @@ async function StaffView({
       teacher: true,
     },
     orderBy: [{ date: "desc" }],
-    // Без фильтра по студенту — отдаём только 10 последних
-    ...(studentId ? {} : { take: 10 }),
+    ...(hasFilters ? {} : { take: 10 }),
   });
 
-  const studentName = studentId ? students.find((s) => s.id === studentId)?.user.fullName : "Все студенты";
+  // Параметры для ссылки на отчёт
+  const reportParams = new URLSearchParams();
+  if (params.speciality) reportParams.set("speciality", params.speciality);
+  if (params.course) reportParams.set("course", params.course);
+  if (params.group) reportParams.set("group", params.group);
+  if (params.studentId) reportParams.set("studentId", params.studentId);
+  if (params.discipline) reportParams.set("discipline", params.discipline);
+  if (params.dateFrom) reportParams.set("dateFrom", params.dateFrom);
+  if (params.dateTo) reportParams.set("dateTo", params.dateTo);
 
   return (
     <div className="space-y-6">
       <div className="flex items-end justify-between gap-4 flex-wrap">
-        <div>
-          <h1 className="text-2xl font-semibold">Промежуточная аттестация</h1>
-          <p className="text-muted-foreground">{studentName ?? "Выберите студента"}</p>
-        </div>
+        <h1 className="text-2xl font-semibold">Промежуточная аттестация</h1>
         <div className="flex gap-2">
-          {studentId && (
-            <Button asChild variant="outline">
-              <Link href={`/print/attestation/${studentId}`} target="_blank">
-                <Printer className="h-4 w-4 mr-2" />
-                Печать отчёта
-              </Link>
-            </Button>
-          )}
+          <Button asChild variant="outline" size="sm">
+            <Link href={`/print/attestation-report?${reportParams.toString()}`} target="_blank">
+              <Printer className="h-4 w-4 mr-2" />Отчёт
+            </Link>
+          </Button>
           {can(session, "assessment:create") && (
             <AssessmentForm
               students={studentOpts}
-              semesters={semesterOpts}
+              semesters={[]}
               disciplines={disciplineOpts}
               teachers={teacherOpts}
               lockTeacher={session.role === "TEACHER"}
-              initial={{ studentId: studentId ?? undefined, teacherId: session.userId }}
+              initial={{ studentId: params.studentId ?? undefined, teacherId: session.userId }}
               trigger={<Button><Plus className="h-4 w-4 mr-2" />Добавить</Button>}
             />
           )}
         </div>
       </div>
 
+      {/* Фильтры */}
       <Card>
         <CardHeader className="pb-3">
-          <CardTitle className="text-base">Выбор студента</CardTitle>
+          <CardTitle className="text-base">Фильтры</CardTitle>
         </CardHeader>
         <CardContent>
-          <form className="flex gap-2 items-end" action="/attestations" method="get">
-            <select
-              name="studentId"
-              defaultValue={studentId ?? ""}
-              className="flex h-9 max-w-md rounded-md border border-input bg-background px-3 text-sm shadow-sm"
-            >
-              <option value="">— все —</option>
-              {studentOpts.map((o) => <option key={o.id} value={o.id}>{o.label}</option>)}
-            </select>
-            <Button type="submit" variant="outline" size="sm">Показать</Button>
+          <form className="grid sm:grid-cols-3 gap-3" action="/attestations" method="get">
+            <FilterSelect name="speciality" label="Специальность" value={params.speciality ?? ""} options={specialities} />
+            <FilterSelect name="course" label="Курс" value={params.course ?? ""} options={courses.map(String)} />
+            <FilterSelect name="group" label="Группа" value={params.group ?? ""} options={groups} />
+            <FilterSelect name="studentId" label="Студент" value={params.studentId ?? ""}
+              options={filteredStudents.map((s) => ({ value: s.id, label: `${s.user.fullName} (${s.group.name})` }))}
+              emptyLabel="— все —" />
+            <FilterSelect name="discipline" label="Дисциплина" value={params.discipline ?? ""}
+              options={disciplines.map((d) => d.name)} />
+            <div className="space-y-1">
+              <label className="text-xs uppercase tracking-wide text-muted-foreground block">Дата с</label>
+              <input type="date" name="dateFrom" defaultValue={params.dateFrom ?? ""}
+                className="flex h-9 w-full rounded-md border border-input bg-background px-3 text-sm shadow-sm" />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs uppercase tracking-wide text-muted-foreground block">Дата по</label>
+              <input type="date" name="dateTo" defaultValue={params.dateTo ?? ""}
+                className="flex h-9 w-full rounded-md border border-input bg-background px-3 text-sm shadow-sm" />
+            </div>
+            <div className="flex gap-2 items-end sm:col-span-3">
+              <Button type="submit" variant="outline" size="sm">Применить</Button>
+              {hasFilters && (
+                <Button type="button" variant="ghost" size="sm" asChild>
+                  <Link href="/attestations">Сбросить</Link>
+                </Button>
+              )}
+              <span className="text-xs text-muted-foreground self-center ml-2">
+                {hasFilters ? `Найдено: ${assessments.length}` : `Последние 10 из всех`}
+              </span>
+            </div>
           </form>
         </CardContent>
       </Card>
 
-      <LiveTableFilter
-        targetSelector='table[data-search="assessments"] tbody tr'
-        placeholder="Поиск по дисциплине, семестру, оценке или преподавателю…"
-      />
-
-      <TableSortEnhancer targetSelector='table[data-search="assessments"]' />
       <Card>
         <CardContent className="p-0">
-          <Table className="data-table" data-search="assessments">
+          <Table className="data-table">
             <TableHeader>
               <TableRow>
-                <TableHead data-sort="text">Семестр</TableHead>
-                <TableHead data-sort="text">Дисциплина</TableHead>
-                <TableHead>Часы / з.е.</TableHead>
-                <TableHead data-sort="text">Тип</TableHead>
-                <TableHead data-sort="text">Оценка</TableHead>
-                <TableHead data-sort="date">Дата</TableHead>
-                <TableHead data-sort="text">Преподаватель</TableHead>
+                <TableHead>Студент</TableHead>
+                <TableHead>Группа</TableHead>
+                <TableHead>Семестр</TableHead>
+                <TableHead>Дисциплина</TableHead>
+                <TableHead>Тип</TableHead>
+                <TableHead>Оценка</TableHead>
+                <TableHead>Дата</TableHead>
+                <TableHead>Преподаватель</TableHead>
                 <TableHead className="text-right">Действия</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {assessments.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={8} className="text-center text-muted-foreground py-8">
+                  <TableCell colSpan={9} className="text-center text-muted-foreground py-8">
                     Записей пока нет.
                   </TableCell>
                 </TableRow>
               ) : (
                 assessments.map((a) => (
                   <TableRow key={a.id}>
+                    <TableCell className="font-medium">{a.student.user.fullName}</TableCell>
+                    <TableCell>{a.student.group.name}</TableCell>
                     <TableCell className="whitespace-nowrap">
-                      {a.semester.academicYear} · {a.semester.course} к. · {a.semester.number} сем.
+                      {a.semester.course}к, {a.semester.number} сем.
                     </TableCell>
                     <TableCell>{a.discipline.name}</TableCell>
-                    <TableCell className="whitespace-nowrap">
-                      {a.hours ?? "—"} / {a.creditUnits ?? "—"}
-                    </TableCell>
                     <TableCell>{assessmentTypeLabel(a.type)}</TableCell>
                     <TableCell>
                       <Badge variant={gradeIsPassing(a.grade) ? "success" : "destructive"}>{a.grade}</Badge>
@@ -348,7 +359,7 @@ async function StaffView({
                           protocolNumber: a.protocolNumber,
                         }}
                         students={studentOpts}
-                        semesters={semesterOpts}
+                        semesters={[]}
                         disciplines={disciplineOpts}
                         teachers={teacherOpts}
                         canEdit={can(session, "assessment:edit") && (session.role !== "TEACHER" || a.teacherId === session.userId)}
@@ -363,6 +374,33 @@ async function StaffView({
           </Table>
         </CardContent>
       </Card>
+    </div>
+  );
+}
+
+function FilterSelect({
+  name, label, value, options, emptyLabel = "— все —",
+}: {
+  name: string;
+  label: string;
+  value: string;
+  options: string[] | { value: string; label: string }[];
+  emptyLabel?: string;
+}) {
+  const normalized = options.map((o) =>
+    typeof o === "string" ? { value: o, label: o } : o
+  );
+  return (
+    <div className="space-y-1">
+      <label className="text-xs uppercase tracking-wide text-muted-foreground block">{label}</label>
+      <select
+        name={name}
+        defaultValue={value}
+        className="flex h-9 w-full rounded-md border border-input bg-background px-3 text-sm shadow-sm"
+      >
+        <option value="">{emptyLabel}</option>
+        {normalized.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+      </select>
     </div>
   );
 }

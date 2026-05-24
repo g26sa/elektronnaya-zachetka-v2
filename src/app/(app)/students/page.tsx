@@ -6,18 +6,23 @@ import { getTeacherStudentIds } from "@/lib/teacherPlan";
 export default async function StudentsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ group?: string; speciality?: string; course?: string }>;
+  searchParams: Promise<{ group?: string; speciality?: string; course?: string; tab?: string }>;
 }) {
   const session = await requireRole("TEACHER", "HEAD");
   const params = await searchParams;
+  const tab = params.tab === "archive" ? "archive" : "active";
 
-  // Преподаватель видит только привязанных к нему студентов (из плана)
   const allowedStudentIds = session.role === "TEACHER"
     ? await getTeacherStudentIds(session.userId)
     : null;
 
+  const isArchived = tab === "archive";
+
   const students = await prisma.student.findMany({
-    where: allowedStudentIds ? { id: { in: allowedStudentIds } } : undefined,
+    where: {
+      ...(allowedStudentIds ? { id: { in: allowedStudentIds } } : {}),
+      user: { isActive: !isArchived },
+    },
     include: {
       user: { select: { fullName: true, email: true, isActive: true } },
       group: { select: { name: true, speciality: true } },
@@ -34,6 +39,7 @@ export default async function StudentsPage({
     recordBookNumber: s.recordBookNumber,
     currentCourse: s.currentCourse,
     group: s.group,
+    archiveReason: (s as { archiveReason?: string | null }).archiveReason ?? null,
     _count: s._count,
   }));
 
@@ -42,13 +48,39 @@ export default async function StudentsPage({
       <div>
         <h1 className="text-2xl font-semibold">Студенты</h1>
       </div>
+
+      {/* Вкладки активные / архив */}
+      <div className="flex gap-2 border-b pb-0">
+        <a
+          href="/students?tab=active"
+          className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+            tab === "active"
+              ? "border-primary text-primary"
+              : "border-transparent text-muted-foreground hover:text-foreground"
+          }`}
+        >
+          Активные
+        </a>
+        <a
+          href="/students?tab=archive"
+          className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+            tab === "archive"
+              ? "border-primary text-primary"
+              : "border-transparent text-muted-foreground hover:text-foreground"
+          }`}
+        >
+          Архив
+        </a>
+      </div>
+
       <StudentsExplorer
         students={rows}
         canEditProfile={session.role === "HEAD"}
         initialGroup={params.group}
         initialSpeciality={params.speciality}
         initialCourse={params.course}
-        defaultLimit={session.role === "TEACHER" ? 10 : undefined}
+        defaultLimit={10}
+        isArchive={tab === "archive"}
       />
     </div>
   );

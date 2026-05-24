@@ -1,9 +1,13 @@
 import Link from "next/link";
-import { getTeacherPlan } from "@/lib/teacherPlan";
+import {
+  getTeacherPlanForDisplay,
+  planItemHref,
+} from "@/lib/teacher-plan-display";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { buttonVariants } from "@/components/ui/button";
 import { teachingKindLabel } from "@/types/enums";
+import { cn } from "@/lib/utils";
 import {
   ClipboardList,
   ChevronRight,
@@ -14,21 +18,20 @@ import {
   FileBadge,
 } from "lucide-react";
 
-const KIND_TARGETS: Record<string, { href: (planId: string, studentId?: string) => string; icon: React.ElementType; label: string }> = {
-  ASSESSMENT:       { href: (pid)        => `/attestations/${pid}`,                              icon: ClipboardList, label: "Открыть" },
-  COURSEWORK:       { href: (_pid, sid)  => `/coursework${sid ? `?studentId=${sid}` : ""}`,       icon: BookOpen,      label: "К курсовым" },
-  PRACTICE:         { href: (_pid, sid)  => `/practice${sid ? `?studentId=${sid}` : ""}`,         icon: Briefcase,     label: "К практике" },
-  VKR:              { href: (_pid, sid)  => `/gia${sid ? `?studentId=${sid}` : ""}`,              icon: GraduationCap, label: "К ВКР" },
-  DEFENSE_CHAIR:    { href: (_pid, sid)  => `/defense${sid ? `?studentId=${sid}` : ""}`,          icon: ScrollText,    label: "К защите" },
-  STATE_EXAM_CHAIR: { href: (_pid, sid)  => `/state-exam${sid ? `?studentId=${sid}` : ""}`,       icon: FileBadge,     label: "К гос. экзамену" },
+const KIND_META: Record<string, { icon: React.ElementType; label: string }> = {
+  ASSESSMENT: { icon: ClipboardList, label: "Открыть" },
+  COURSEWORK: { icon: BookOpen, label: "К курсовым" },
+  PRACTICE: { icon: Briefcase, label: "К практике" },
+  VKR: { icon: GraduationCap, label: "К ВКР" },
+  DEFENSE_CHAIR: { icon: ScrollText, label: "К защите" },
+  STATE_EXAM_CHAIR: { icon: FileBadge, label: "К гос. экзамену" },
 };
 
 /**
  * Карточный обзор плана преподавателя. Сгруппирован по типу работы.
- * Часы скрываются для ВКР/защиты/гос.экзамена и для практики без указанных часов.
  */
 export async function TeacherPlanView({ teacherId }: { teacherId: string }) {
-  const plan = await getTeacherPlan(teacherId);
+  const plan = await getTeacherPlanForDisplay(teacherId, { onlyWithActualWork: true });
 
   const byKind = new Map<string, typeof plan>();
   for (const item of plan) {
@@ -41,8 +44,10 @@ export async function TeacherPlanView({ teacherId }: { teacherId: string }) {
     return (
       <Card><CardContent className="p-8 text-center text-muted-foreground space-y-2">
         <ClipboardList className="h-10 w-10 mx-auto opacity-30" />
-        <p>Заведующий отделением ещё не сформировал ваш план.</p>
-        <p className="text-xs">После назначений здесь появятся ваши дисциплины, группы и студенты.</p>
+        <p>Нет активных направлений для отображения.</p>
+        <p className="text-xs">
+          Здесь показываются дисциплины, ВКР и практики, по которым уже заведены данные в системе.
+        </p>
       </CardContent></Card>
     );
   }
@@ -50,8 +55,9 @@ export async function TeacherPlanView({ teacherId }: { teacherId: string }) {
   return (
     <div className="space-y-6">
       {Array.from(byKind.entries()).map(([kind, items]) => {
-        const target = KIND_TARGETS[kind];
-        const Icon = target?.icon ?? ClipboardList;
+        const meta = KIND_META[kind];
+        const Icon = meta?.icon ?? ClipboardList;
+        const actionLabel = meta?.label ?? "Открыть";
         const hideHoursForKind = kind === "VKR" || kind === "DEFENSE_CHAIR" || kind === "STATE_EXAM_CHAIR";
         return (
           <Card key={kind}>
@@ -64,37 +70,37 @@ export async function TeacherPlanView({ teacherId }: { teacherId: string }) {
             </CardHeader>
             <CardContent className="space-y-2">
               {items.map((it) => {
-                // Семестр — просто номер; группа сама несёт год набора
-                const semLabel = it.semester ? `${it.semester.number} сем.` : "—";
-                const sidForLink = it.studentId ?? undefined;
+                const href = planItemHref(it);
                 const showHours =
                   !hideHoursForKind && it.hours != null && it.hours > 0;
                 return (
-                  <div
+                  <Link
                     key={it.id}
-                    className="flex items-center justify-between gap-3 p-3 rounded-md border bg-card hover:bg-accent/50 transition-colors"
+                    href={href}
+                    className="flex items-center justify-between gap-3 p-3 rounded-md border bg-card hover:bg-accent transition-colors"
                   >
                     <div className="min-w-0 flex-1">
-                      <div className="font-medium truncate">
-                        {it.discipline?.name ?? (it.student ? it.student.user.fullName : "Без дисциплины")}
-                      </div>
-                      <div className="text-xs text-muted-foreground space-x-3">
-                        <span>{semLabel}</span>
-                        {it.group && <span>· группа <b>{it.group.name}</b></span>}
-                        {it.student && <span>· {it.student.user.fullName}</span>}
-                        {showHours && <span>· {it.hours} ч.</span>}
-                        {it.notes && <span>· {it.notes}</span>}
-                      </div>
+                      <div className="font-medium truncate">{it.displayTitle}</div>
+                      {it.displaySubtitle && (
+                        <div className="text-xs text-muted-foreground truncate" title={it.displaySubtitle}>
+                          {it.displaySubtitle}
+                          {showHours && !it.displaySubtitle.includes(" ч.") ? ` · ${it.hours} ч.` : ""}
+                        </div>
+                      )}
+                      {!it.displaySubtitle && showHours && (
+                        <div className="text-xs text-muted-foreground">{it.hours} ч.</div>
+                      )}
                     </div>
-                    {target && (
-                      <Button asChild variant="outline" size="sm">
-                        <Link href={target.href(it.id, sidForLink)}>
-                          {target.label}
-                          <ChevronRight className="h-4 w-4 ml-1" />
-                        </Link>
-                      </Button>
-                    )}
-                  </div>
+                    <span
+                      className={cn(
+                        buttonVariants({ variant: "outline", size: "sm" }),
+                        "shrink-0 pointer-events-none"
+                      )}
+                    >
+                      {actionLabel}
+                      <ChevronRight className="h-4 w-4 ml-1" />
+                    </span>
+                  </Link>
                 );
               })}
             </CardContent>

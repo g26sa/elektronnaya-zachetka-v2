@@ -16,6 +16,7 @@ import { saveVkrQuick } from "./actions-quick";
 import { formatDate } from "@/lib/utils";
 import { useWatch } from "react-hook-form";
 import { Plus, X, Printer, Pencil, Search } from "lucide-react";
+import type { TeacherListFilters } from "@/lib/teacher-plan-display";
 
 export type VkrRow = {
   id: string | null;       // null если ВКР ещё не создана для этого студента
@@ -34,15 +35,17 @@ export type VkrRow = {
 export function TeacherVkrView({
   rows,
   vkrTypes,
+  initialFilters,
 }: {
   rows: VkrRow[];
   vkrTypes: { id: string; name: string }[];
+  initialFilters?: TeacherListFilters;
 }) {
   const [search, setSearch] = useState("");
   const [speciality, setSpeciality] = useState("");
   const [course, setCourse] = useState("");
-  const [groupName, setGroupName] = useState("");
-  const [studentId, setStudentId] = useState("");
+  const [groupName, setGroupName] = useState(initialFilters?.group ?? "");
+  const [studentId, setStudentId] = useState(initialFilters?.studentId ?? "");
 
   const specialities = useMemo(
     () => Array.from(new Set(rows.map((r) => r.groupSpeciality).filter(Boolean))).sort(),

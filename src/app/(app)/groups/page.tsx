@@ -4,62 +4,68 @@ import { prisma } from "@/lib/db";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { GroupForm } from "./GroupForm";
 import { GroupRowActions } from "./GroupRowActions";
-import { LiveTableFilter } from "@/components/LiveTableFilter";
-import { TableSortEnhancer } from "@/components/TableSortEnhancer";
-import { Plus, Users } from "lucide-react";
+import { GroupImportDialog } from "./GroupImportDialog";
+import { GroupsFilterClient } from "./GroupsFilterClient";
+import { Users } from "lucide-react";
 
-export default async function GroupsPage() {
+export default async function GroupsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ speciality?: string; course?: string; group?: string; year?: string }>;
+}) {
   await requireRole("HEAD");
-  const groups = await prisma.group.findMany({
+  const params = await searchParams;
+
+  const allGroups = await prisma.group.findMany({
     include: { _count: { select: { students: true } } },
     orderBy: [{ startYear: "desc" }, { name: "asc" }],
   });
 
   const specialities = Array.from(
-    new Set(groups.map((g) => g.speciality).filter(Boolean) as string[])
+    new Set(allGroups.map((g) => g.speciality).filter(Boolean) as string[])
   ).sort();
+
+  const years = Array.from(new Set(allGroups.map((g) => g.startYear))).sort((a, b) => b - a);
+
+  // Фильтрация
+  let groups = allGroups;
+  if (params.speciality) groups = groups.filter((g) => g.speciality === params.speciality);
+  if (params.year) groups = groups.filter((g) => String(g.startYear) === params.year);
+  if (params.group) groups = groups.filter((g) => g.name.toLowerCase().includes(params.group!.toLowerCase()));
 
   return (
     <div className="space-y-4">
-      <div className="flex items-end justify-between gap-4 flex-wrap">
-        <div>
-          <h1 className="text-2xl font-semibold">Группы</h1>
-          <p className="text-muted-foreground text-sm">
-            Учебные группы, их специальность и год набора. Назначаются студентам в их профиле.
-          </p>
-        </div>
-        <GroupForm
-          specialities={specialities}
-          trigger={<Button><Plus className="h-4 w-4 mr-2" />Создать группу</Button>}
-        />
+      <div>
+        <h1 className="text-2xl font-semibold">Группы</h1>
       </div>
 
-      <LiveTableFilter
-        targetSelector='table[data-search="groups"] tbody tr'
-        placeholder="Поиск по названию, специальности или году набора…"
+      <GroupsFilterClient
+        initialSpeciality={params.speciality ?? ""}
+        initialYear={params.year ?? ""}
+        initialGroup={params.group ?? ""}
+        specialities={specialities}
+        years={years.map(String)}
       />
 
-      <TableSortEnhancer targetSelector='table[data-search="groups"]' />
       <Card>
         <CardContent className="p-0">
-          <Table className="data-table" data-search="groups">
+          <Table className="data-table">
             <TableHeader>
               <TableRow>
-                <TableHead data-sort="text">Название</TableHead>
-                <TableHead data-sort="text">Специальность / направление</TableHead>
-                <TableHead data-sort="number">Год набора</TableHead>
-                <TableHead data-sort="number">Студентов</TableHead>
+                <TableHead>Название</TableHead>
+                <TableHead>Специальность</TableHead>
+                <TableHead>Год набора</TableHead>
+                <TableHead>Студентов</TableHead>
                 <TableHead className="text-right">Действия</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {groups.length === 0 ? (
-                <TableRow data-empty="1">
+                <TableRow>
                   <TableCell colSpan={5} className="text-center text-muted-foreground py-10">
                     <Users className="h-8 w-8 mx-auto mb-2 opacity-40" />
-                    Групп пока нет. Создайте первую кнопкой выше.
+                    Групп пока нет. Импортируйте студентов через Excel.
                   </TableCell>
                 </TableRow>
               ) : groups.map((g) => (
@@ -71,21 +77,24 @@ export default async function GroupsPage() {
                     {g._count.students > 0 ? (
                       <Link
                         href={`/students?group=${encodeURIComponent(g.name)}`}
-                        className="underline-offset-2 hover:underline"
+                        className="underline-offset-2 hover:underline text-primary"
                       >
-                        {g._count.students}
+                        {g._count.students} →
                       </Link>
                     ) : (
                       <span className="text-muted-foreground">0</span>
                     )}
                   </TableCell>
                   <TableCell className="text-right">
-                    <GroupRowActions
-                      id={g.id}
-                      initial={{ name: g.name, speciality: g.speciality, startYear: g.startYear }}
-                      specialities={specialities}
-                      studentCount={g._count.students}
-                    />
+                    <div className="flex justify-end gap-1">
+                      <GroupImportDialog groupId={g.id} groupName={g.name} />
+                      <GroupRowActions
+                        id={g.id}
+                        initial={{ name: g.name, speciality: g.speciality, startYear: g.startYear }}
+                        specialities={specialities}
+                        studentCount={g._count.students}
+                      />
+                    </div>
                   </TableCell>
                 </TableRow>
               ))}

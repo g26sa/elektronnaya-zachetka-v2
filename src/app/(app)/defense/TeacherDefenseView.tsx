@@ -16,6 +16,7 @@ import { GradeSelect } from "@/components/forms/GradeSelect";
 import { saveDefenseQuick } from "./actions-quick";
 import { admissionLabel, formatDate, gradeIsPassing } from "@/lib/utils";
 import { Plus, X, Printer, Pencil, Search } from "lucide-react";
+import type { TeacherListFilters } from "@/lib/teacher-plan-display";
 
 export type DefenseRow = {
   studentId: string;
@@ -34,15 +35,17 @@ export type DefenseRow = {
 export function TeacherDefenseView({
   rows,
   chairs,
+  initialFilters,
 }: {
   rows: DefenseRow[];
   chairs: { id: string; fullName: string }[];
+  initialFilters?: TeacherListFilters;
 }) {
   const [search, setSearch] = useState("");
   const [speciality, setSpeciality] = useState("");
   const [course, setCourse] = useState("");
-  const [groupName, setGroupName] = useState("");
-  const [studentId, setStudentId] = useState("");
+  const [groupName, setGroupName] = useState(initialFilters?.group ?? "");
+  const [studentId, setStudentId] = useState(initialFilters?.studentId ?? "");
 
   const specialities = useMemo(() => Array.from(new Set(rows.map((r) => r.groupSpeciality).filter(Boolean))).sort(), [rows]);
   const afterSpec = useMemo(() => speciality ? rows.filter((r) => r.groupSpeciality === speciality) : rows, [rows, speciality]);

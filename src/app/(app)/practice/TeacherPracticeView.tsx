@@ -12,6 +12,7 @@ import { PracticeQuickForm, type PracticePlanSlot, type StudentRef } from "./Pra
 import { deletePractice } from "./actions";
 import { formatDate, gradeIsPassing, practiceKindLabel } from "@/lib/utils";
 import { Plus, X, Printer, Pencil, Trash2, Search } from "lucide-react";
+import type { TeacherListFilters } from "@/lib/teacher-plan-display";
 
 export type PracticeRow = {
   id: string;
@@ -39,19 +40,21 @@ export function TeacherPracticeView({
   planSlots,
   students,
   institutionName,
+  initialFilters,
 }: {
   rows: PracticeRow[];
   planSlots: PracticePlanSlot[];
   students: StudentRef[];
   institutionName: string;
+  initialFilters?: TeacherListFilters;
 }) {
   const [search, setSearch] = useState("");
   const [speciality, setSpeciality] = useState("");
   const [course, setCourse] = useState("");
-  const [groupName, setGroupName] = useState("");
-  const [semester, setSemester] = useState("");
-  const [kind, setKind] = useState("");
-  const [studentId, setStudentId] = useState("");
+  const [groupName, setGroupName] = useState(initialFilters?.group ?? "");
+  const [semester, setSemester] = useState(initialFilters?.semester ?? "");
+  const [kind, setKind] = useState(initialFilters?.kind ?? "");
+  const [studentId, setStudentId] = useState(initialFilters?.studentId ?? "");
 
   const specialities = useMemo(
     () => Array.from(new Set(rows.map((r) => r.groupSpeciality).filter(Boolean))).sort(),

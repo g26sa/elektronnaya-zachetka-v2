@@ -8,39 +8,57 @@ import { Badge } from "@/components/ui/badge";
 import { roleLabel } from "@/lib/utils";
 import { UserForm } from "./UserForm";
 import { ToggleActive } from "./ToggleActive";
-import { LiveTableFilter } from "@/components/LiveTableFilter";
-import { TableSortEnhancer } from "@/components/TableSortEnhancer";
+import { UsersFilterClient } from "./UsersFilterClient";
 import { Plus, Pencil } from "lucide-react";
 
-export default async function UsersPage() {
+export default async function UsersPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ role?: string; status?: string }>;
+}) {
   await requireRole("HEAD");
-  const users = await prisma.user.findMany({ orderBy: [{ role: "asc" }, { fullName: "asc" }] });
+  const params = await searchParams;
+
+  const roleFilter = params.role && params.role !== "" ? params.role : undefined;
+  const statusFilter = params.status;
+
+  const users = await prisma.user.findMany({
+    where: {
+      role: { not: "STUDENT", ...(roleFilter ? { equals: roleFilter } : {}) },
+      ...(statusFilter === "active" ? { isActive: true } : statusFilter === "inactive" ? { isActive: false } : {}),
+    },
+    orderBy: [{ role: "asc" }, { fullName: "asc" }],
+  });
 
   return (
     <div className="space-y-4">
       <div className="flex items-end justify-between">
         <div>
-          <h1 className="text-2xl font-semibold">Управление пользователями и ролями</h1>
-          <p className="text-muted-foreground text-sm">Студенты, преподаватели, заведующие отделением</p>
+          <h1 className="text-2xl font-semibold">Управление ролями</h1>
         </div>
         <UserForm trigger={<Button><Plus className="h-4 w-4 mr-2" />Создать</Button>} />
       </div>
 
-      <LiveTableFilter
-        targetSelector='table[data-search="users"] tbody tr'
-        placeholder="Поиск по ФИО, email, роли или должности…"
-      />
+      <UsersFilterClient initialRole={params.role ?? ""} initialStatus={params.status ?? ""} />
 
-      <TableSortEnhancer targetSelector='table[data-search="users"]' />
       <Card><CardContent className="p-0">
-        <Table className="data-table" data-search="users">
+        <Table className="data-table">
           <TableHeader><TableRow>
-            <TableHead data-sort="text">ФИО</TableHead><TableHead data-sort="text">Email</TableHead><TableHead data-sort="text">Роль</TableHead>
-            <TableHead data-sort="text">Должность</TableHead><TableHead data-sort="text">Статус</TableHead>
+            <TableHead>ФИО</TableHead>
+            <TableHead>Email</TableHead>
+            <TableHead>Роль</TableHead>
+            <TableHead>Должность</TableHead>
+            <TableHead>Статус</TableHead>
             <TableHead className="text-right">Действия</TableHead>
           </TableRow></TableHeader>
           <TableBody>
-            {users.map((u) => (
+            {users.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
+                  Нет пользователей по заданным фильтрам.
+                </TableCell>
+              </TableRow>
+            ) : users.map((u) => (
               <TableRow key={u.id}>
                 <TableCell>{u.fullName}</TableCell>
                 <TableCell>{u.email}</TableCell>

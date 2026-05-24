@@ -75,7 +75,7 @@ export function UserForm({
         <form onSubmit={submit} className="grid sm:grid-cols-2 gap-4">
           <F label="Email" err={errors.email?.message}><Input type="email" {...register("email")} /></F>
           <F label="ФИО" err={errors.fullName?.message}><Input {...register("fullName")} /></F>
-          <Sel label="Роль" {...register("role")} options={[{id:"STUDENT",label:"Студент"},{id:"TEACHER",label:"Преподаватель"},{id:"HEAD",label:"Заведующий отделением"}]} err={errors.role?.message} />
+          <Sel label="Роль" {...register("role")} options={[{id:"TEACHER",label:"Преподаватель"},{id:"HEAD",label:"Заведующий отделением"}]} err={errors.role?.message} />
           <F label="Должность"><Input {...register("position")} /></F>
           <F
             label={id ? "Новый пароль (если меняем)" : "Пароль (необязательно)"}

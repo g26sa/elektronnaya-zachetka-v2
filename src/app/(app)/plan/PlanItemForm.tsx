@@ -22,6 +22,7 @@ export function PlanItemForm({
   disciplines,
   groups,
   students,
+  defaultKind,
 }: {
   trigger: React.ReactNode;
   id?: string;
@@ -31,6 +32,7 @@ export function PlanItemForm({
   disciplines: Opt[];
   groups: Opt[];
   students: Opt[];
+  defaultKind?: TeachingKind;
 }) {
   const [open, setOpen] = useState(false);
   const [pending, startTransition] = useTransition();
@@ -42,7 +44,7 @@ export function PlanItemForm({
     resolver: zodResolver(planItemSchema),
     defaultValues: {
       teacherId: initial?.teacherId ?? "",
-      kind: (initial?.kind as TeachingKind) ?? "ASSESSMENT",
+      kind: (initial?.kind as TeachingKind) ?? defaultKind ?? "ASSESSMENT",
       semesterId: initial?.semesterId ?? "",
       disciplineId: initial?.disciplineId ?? "",
       groupId: initial?.groupId ?? "",

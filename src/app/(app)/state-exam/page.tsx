@@ -1,96 +1,173 @@
+import Link from "next/link";
 import { requireSession } from "@/lib/auth";
 import type { Admission } from "@/types/enums";
 import { prisma } from "@/lib/db";
 import { can } from "@/lib/rbac";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { StateExamForm } from "./StateExamForm";
 import { StateExamRowActions } from "./StateExamRowActions";
-import { LiveTableFilter } from "@/components/LiveTableFilter";
-import { TableSortEnhancer } from "@/components/TableSortEnhancer";
 import { TeacherStateExamView, type StateExamRow } from "./TeacherStateExamView";
 import { getTeacherPlan } from "@/lib/teacherPlan";
 import { admissionLabel, formatDate, gradeIsPassing } from "@/lib/utils";
-import { Plus } from "lucide-react";
+import { Plus, Printer } from "lucide-react";
 
-export default async function StateExamPage({ searchParams }: { searchParams: Promise<{ studentId?: string }> }) {
+export default async function StateExamPage({
+  searchParams,
+}: {
+  searchParams: Promise<{
+    studentId?: string; speciality?: string; course?: string; group?: string;
+    admission?: string; dateFrom?: string; dateTo?: string;
+  }>;
+}) {
   const session = await requireSession();
   const params = await searchParams;
   const isStudent = session.role === "STUDENT";
+
   let studentId: string | null = params.studentId ?? null;
   if (isStudent) {
     const me = await prisma.student.findUnique({ where: { userId: session.userId } });
     studentId = me?.id ?? null;
   }
 
-  if (session.role === "TEACHER") return <TeacherFlow teacherId={session.userId} />;
-  const [students, chairs, items] = await Promise.all([
+  if (session.role === "TEACHER") {
+    const { pickTeacherListFilters } = await import("@/lib/teacher-list-filters");
+    return (
+      <TeacherFlow
+        teacherId={session.userId}
+        initialFilters={pickTeacherListFilters(params)}
+      />
+    );
+  }
+
+  const [allStudents, chairs] = await Promise.all([
     prisma.student.findMany({ include: { user: true, group: true }, orderBy: { user: { fullName: "asc" } } }),
     prisma.user.findMany({ where: { role: { in: ["TEACHER", "HEAD"] } }, orderBy: { fullName: "asc" } }),
-    prisma.stateExam.findMany({
-      where: studentId ? { studentId } : undefined,
-      include: { student: { include: { user: true } }, chair: true },
-      orderBy: { date: "desc" },
-    }),
   ]);
-  const oS = students.map((s) => ({ id: s.id, label: `${s.user.fullName} (${s.group.name})` }));
+
+  let filteredStudents = allStudents;
+  if (params.speciality) filteredStudents = filteredStudents.filter((s) => s.group.speciality === params.speciality);
+  if (params.course) filteredStudents = filteredStudents.filter((s) => String(s.currentCourse) === params.course);
+  if (params.group) filteredStudents = filteredStudents.filter((s) => s.group.name === params.group);
+
+  const specialities = Array.from(new Set(allStudents.map((s) => s.group.speciality).filter(Boolean) as string[])).sort();
+  const courses = Array.from(new Set(allStudents.map((s) => s.currentCourse))).sort((a, b) => a - b);
+  const groups = Array.from(new Set(filteredStudents.map((s) => s.group.name))).sort();
+
+  const filteredStudentIds = filteredStudents.map((s) => s.id);
+  const hasFilters = !!(isStudent || studentId || params.speciality || params.course || params.group || params.admission || params.dateFrom || params.dateTo);
+
+  const items = await prisma.stateExam.findMany({
+    where: {
+      ...(studentId
+        ? { studentId }
+        : !isStudent && filteredStudentIds.length !== allStudents.length
+          ? { studentId: { in: filteredStudentIds } }
+          : {}),
+      ...(params.admission ? { admission: params.admission } : {}),
+      ...(params.dateFrom || params.dateTo ? {
+        date: {
+          ...(params.dateFrom ? { gte: new Date(params.dateFrom) } : {}),
+          ...(params.dateTo ? { lte: new Date(params.dateTo + "T23:59:59") } : {}),
+        }
+      } : {}),
+    },
+    include: { student: { include: { user: true, group: true } }, chair: true },
+    orderBy: { date: "desc" },
+    ...(hasFilters ? {} : { take: 10 }),
+  });
+
+  const oS = allStudents.map((s) => ({ id: s.id, label: `${s.user.fullName} (${s.group.name})` }));
   const oCh = chairs.map((c) => ({ id: c.id, label: c.fullName }));
+
+  const reportParams = new URLSearchParams();
+  if (params.speciality) reportParams.set("speciality", params.speciality);
+  if (params.course) reportParams.set("course", params.course);
+  if (params.group) reportParams.set("group", params.group);
+  if (studentId) reportParams.set("studentId", studentId);
 
   return (
     <div className="space-y-6">
       <div className="flex items-end justify-between gap-4 flex-wrap">
-        <div><h1 className="text-2xl font-semibold">Государственный экзамен</h1></div>
-        {can(session, "stateExam:edit") && (
-          <StateExamForm
-            students={oS} chairs={oCh}
-            initial={{ studentId: studentId ?? undefined }}
-            trigger={<Button><Plus className="h-4 w-4 mr-2" />Добавить</Button>}
-          />
-        )}
+        <h1 className="text-2xl font-semibold">Государственный экзамен</h1>
+        <div className="flex gap-2">
+          {!isStudent && (
+            <Button asChild variant="outline" size="sm">
+              <Link href={`/print/state-exam-report?${reportParams.toString()}`} target="_blank">
+                <Printer className="h-4 w-4 mr-2" />Отчёт
+              </Link>
+            </Button>
+          )}
+          {can(session, "stateExam:edit") && (
+            <StateExamForm
+              students={oS} chairs={oCh}
+              initial={{ studentId: studentId ?? undefined }}
+              trigger={<Button><Plus className="h-4 w-4 mr-2" />Добавить</Button>}
+            />
+          )}
+        </div>
       </div>
 
       {!isStudent && (
-        <Card><CardContent className="p-4">
-          <form className="flex gap-2 items-end" action="/state-exam" method="get">
-            <select name="studentId" defaultValue={studentId ?? ""} className="flex h-9 max-w-md rounded-md border border-input bg-background px-3 text-sm">
-              <option value="">— все —</option>
-              {oS.map(o => <option key={o.id} value={o.id}>{o.label}</option>)}
-            </select>
-            <Button type="submit" variant="outline" size="sm">Показать</Button>
-          </form>
-        </CardContent></Card>
+        <Card>
+          <CardHeader className="pb-3"><CardTitle className="text-base">Фильтры</CardTitle></CardHeader>
+          <CardContent>
+            <form className="grid sm:grid-cols-3 gap-3" action="/state-exam" method="get">
+              <Sel name="speciality" label="Специальность" value={params.speciality ?? ""} opts={specialities.map((s) => ({ v: s, l: s }))} />
+              <Sel name="course" label="Курс" value={params.course ?? ""} opts={courses.map((c) => ({ v: String(c), l: String(c) }))} />
+              <Sel name="group" label="Группа" value={params.group ?? ""} opts={groups.map((g) => ({ v: g, l: g }))} />
+              <Sel name="studentId" label="Студент" value={studentId ?? ""} opts={filteredStudents.map((s) => ({ v: s.id, l: `${s.user.fullName} (${s.group.name})` }))} />
+              <Sel name="admission" label="Допуск" value={params.admission ?? ""} opts={[{ v: "ADMITTED", l: "Допущен" }, { v: "NOT_ADMITTED", l: "Не допущен" }]} />
+              <div className="space-y-1">
+                <label className="text-xs uppercase tracking-wide text-muted-foreground block">Дата экзамена с</label>
+                <input type="date" name="dateFrom" defaultValue={params.dateFrom ?? ""} className="flex h-9 w-full rounded-md border border-input bg-background px-3 text-sm shadow-sm" />
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs uppercase tracking-wide text-muted-foreground block">Дата экзамена по</label>
+                <input type="date" name="dateTo" defaultValue={params.dateTo ?? ""} className="flex h-9 w-full rounded-md border border-input bg-background px-3 text-sm shadow-sm" />
+              </div>
+              <div className="flex gap-2 items-end sm:col-span-3">
+                <Button type="submit" variant="outline" size="sm">Применить</Button>
+                {hasFilters && <Button type="button" variant="ghost" size="sm" asChild><Link href="/state-exam">Сбросить</Link></Button>}
+                <span className="text-xs text-muted-foreground self-center ml-2">
+                  {hasFilters ? `Найдено: ${items.length}` : `Последние 10 из всех`}
+                </span>
+              </div>
+            </form>
+          </CardContent>
+        </Card>
       )}
 
-      {!isStudent && (
-        <LiveTableFilter
-          targetSelector='table[data-search="stateExam"] tbody tr'
-          placeholder="Поиск по студенту, названию, председателю…"
-        />
-      )}
-
-      {!isStudent && <TableSortEnhancer targetSelector='table[data-search="stateExam"]' />}
       <Card><CardContent className="p-0">
-        <Table className="data-table" data-search="stateExam">
+        <Table className="data-table">
           <TableHeader><TableRow>
-            {!isStudent && <TableHead data-sort="text">Студент</TableHead>}
-            <TableHead data-sort="text">Название</TableHead><TableHead data-sort="text">Допуск</TableHead><TableHead data-sort="date">Дата</TableHead>
-            <TableHead data-sort="text">Оценка</TableHead><TableHead data-sort="text">Председатель ГЭК</TableHead><TableHead data-sort="text">Протокол</TableHead>
+            {!isStudent && <TableHead>Студент</TableHead>}
+            {!isStudent && <TableHead>Группа</TableHead>}
+            <TableHead>Название</TableHead>
+            <TableHead>Допуск</TableHead>
+            <TableHead>Дата</TableHead>
+            <TableHead>Оценка</TableHead>
+            <TableHead>Председатель ГЭК</TableHead>
+            <TableHead>Протокол</TableHead>
             {!isStudent && <TableHead className="text-right">Действия</TableHead>}
           </TableRow></TableHeader>
           <TableBody>
             {items.length === 0 ? (
-              <TableRow><TableCell colSpan={isStudent ? 6 : 8} className="text-center text-muted-foreground py-8">Записей нет.</TableCell></TableRow>
+              <TableRow><TableCell colSpan={isStudent ? 6 : 9} className="text-center text-muted-foreground py-8">Записей нет.</TableCell></TableRow>
             ) : items.map((e) => (
               <TableRow key={e.id}>
                 {!isStudent && <TableCell>{e.student.user.fullName}</TableCell>}
+                {!isStudent && <TableCell>{e.student.group.name}</TableCell>}
                 <TableCell>{e.name}</TableCell>
                 <TableCell>
                   <Badge variant={e.admission === "ADMITTED" ? "success" : "destructive"}>{admissionLabel(e.admission)}</Badge>
                 </TableCell>
                 <TableCell className="whitespace-nowrap">{formatDate(e.date)}</TableCell>
-                <TableCell>{e.grade ? <Badge variant={gradeIsPassing(e.grade) ? "success" : "destructive"}>{e.grade}</Badge> : "—"}</TableCell>
+                <TableCell>
+                  {e.grade ? <Badge variant={gradeIsPassing(e.grade) ? "success" : "destructive"}>{e.grade}</Badge> : "—"}
+                </TableCell>
                 <TableCell>{e.chair?.fullName ?? "—"}</TableCell>
                 <TableCell>{e.protocolNumber ?? "—"}</TableCell>
                 {!isStudent && (
@@ -99,8 +176,8 @@ export default async function StateExamPage({ searchParams }: { searchParams: Pr
                       id={e.id}
                       initial={{
                         studentId: e.studentId, name: e.name, admission: e.admission as Admission,
-                        admissionDate: e.admissionDate ? e.admissionDate.toISOString().slice(0,10) : "",
-                        date: e.date ? e.date.toISOString().slice(0,10) : "",
+                        admissionDate: e.admissionDate ? e.admissionDate.toISOString().slice(0, 10) : "",
+                        date: e.date ? e.date.toISOString().slice(0, 10) : "",
                         grade: e.grade ?? "", chairId: e.chairId ?? "",
                         protocolNumber: e.protocolNumber ?? "",
                       }}
@@ -118,12 +195,17 @@ export default async function StateExamPage({ searchParams }: { searchParams: Pr
   );
 }
 
-async function TeacherFlow({ teacherId }: { teacherId: string }) {
+async function TeacherFlow({
+  teacherId,
+  initialFilters,
+}: {
+  teacherId: string;
+  initialFilters?: import("@/lib/teacher-plan-display").TeacherListFilters;
+}) {
   const plan = await getTeacherPlan(teacherId);
   const planStudentIds = Array.from(
     new Set(plan.filter((p) => p.studentId).map((p) => p.studentId!))
   );
-  // плюс группы препода — все студенты этих групп тоже видны
   const groupIds = Array.from(new Set(plan.filter((p) => p.groupId).map((p) => p.groupId!)));
   const studentsFromGroups = groupIds.length > 0
     ? await prisma.student.findMany({ where: { groupId: { in: groupIds } }, select: { id: true } })
@@ -159,10 +241,20 @@ async function TeacherFlow({ teacherId }: { teacherId: string }) {
 
   return (
     <div className="space-y-4">
-      <div>
-        <h1 className="text-2xl font-semibold">Государственный экзамен</h1>
-      </div>
-      <TeacherStateExamView rows={rows} />
+      <h1 className="text-2xl font-semibold">Государственный экзамен</h1>
+      <TeacherStateExamView rows={rows} initialFilters={initialFilters} />
+    </div>
+  );
+}
+
+function Sel({ name, label, value, opts }: { name: string; label: string; value: string; opts: { v: string; l: string }[] }) {
+  return (
+    <div className="space-y-1">
+      <label className="text-xs uppercase tracking-wide text-muted-foreground block">{label}</label>
+      <select name={name} defaultValue={value} className="flex h-9 w-full rounded-md border border-input bg-background px-3 text-sm shadow-sm">
+        <option value="">— все —</option>
+        {opts.map((o) => <option key={o.v} value={o.v}>{o.l}</option>)}
+      </select>
     </div>
   );
 }

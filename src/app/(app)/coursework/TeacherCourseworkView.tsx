@@ -12,6 +12,7 @@ import { CourseWorkQuickForm, type PlanSlot, type StudentRef } from "./CourseWor
 import { deleteCourseWork } from "./actions";
 import { gradeIsPassing, formatDate } from "@/lib/utils";
 import { Plus, X, Printer, Pencil, Trash2, Search } from "lucide-react";
+import type { TeacherListFilters } from "@/lib/teacher-plan-display";
 
 export type CourseworkRow = {
   id: string;
@@ -36,18 +37,20 @@ export function TeacherCourseworkView({
   rows,
   planSlots,
   students,
+  initialFilters,
 }: {
   rows: CourseworkRow[];
   planSlots: PlanSlot[];
   students: StudentRef[];
+  initialFilters?: TeacherListFilters;
 }) {
   const [search, setSearch] = useState("");
   const [speciality, setSpeciality] = useState("");
   const [course, setCourse] = useState("");
-  const [groupName, setGroupName] = useState("");
-  const [discipline, setDiscipline] = useState("");
-  const [semester, setSemester] = useState("");
-  const [studentId, setStudentId] = useState("");
+  const [groupName, setGroupName] = useState(initialFilters?.group ?? "");
+  const [discipline, setDiscipline] = useState(initialFilters?.discipline ?? "");
+  const [semester, setSemester] = useState(initialFilters?.semester ?? "");
+  const [studentId, setStudentId] = useState(initialFilters?.studentId ?? "");
   const [withGradeOnly, setWithGradeOnly] = useState<"" | "graded" | "topicOnly">("");
 
   const specialities = useMemo(

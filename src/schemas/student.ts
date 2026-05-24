@@ -14,6 +14,8 @@ export const studentProfileSchema = z.object({
   enrollmentOrder: z.string().optional().nullable(),
   expulsionDate: z.string().optional().nullable(),
   expulsionOrder: z.string().optional().nullable(),
+  academicLeaveDate: z.string().optional().nullable(),
+  academicLeaveOrder: z.string().optional().nullable(),
   currentCourse: z.coerce.number().int().positive(),
 });
 export type StudentProfileInput = z.infer<typeof studentProfileSchema>;

@@ -17,19 +17,22 @@ import {
 
 type Item = { href: string; label: string; icon: React.ElementType; roles: Role[] };
 
-const ITEMS: Item[] = [
+const ACADEMIC_ITEMS: Item[] = [
   { href: "/dashboard", label: "Главная", icon: LayoutDashboard, roles: ["STUDENT", "TEACHER", "HEAD"] },
   { href: "/profile", label: "Профиль", icon: User, roles: ["STUDENT", "TEACHER", "HEAD"] },
   { href: "/students", label: "Студенты", icon: Users, roles: ["TEACHER", "HEAD"] },
   { href: "/attestations", label: "Промежуточная аттестация", icon: ClipboardList, roles: ["STUDENT", "TEACHER", "HEAD"] },
   { href: "/coursework", label: "Курсовые работы", icon: BookOpen, roles: ["STUDENT", "TEACHER", "HEAD"] },
   { href: "/practice", label: "Практика", icon: Briefcase, roles: ["STUDENT", "TEACHER", "HEAD"] },
-  { href: "/gia", label: "Выпускная квалификационная работа", icon: GraduationCap, roles: ["STUDENT", "TEACHER", "HEAD"] },
+  { href: "/gia", label: "ВКР", icon: GraduationCap, roles: ["STUDENT", "TEACHER", "HEAD"] },
   { href: "/defense", label: "Защита ВКР", icon: ScrollText, roles: ["STUDENT", "TEACHER", "HEAD"] },
   { href: "/state-exam", label: "Государственный экзамен", icon: FileBadge, roles: ["STUDENT", "TEACHER", "HEAD"] },
+  { href: "/plan", label: "Планы преподавателей", icon: CalendarRange, roles: ["TEACHER", "HEAD"] },
+];
+
+const ADMIN_ITEMS: Item[] = [
   { href: "/audit", label: "История изменений", icon: History, roles: ["HEAD"] },
   { href: "/groups", label: "Группы", icon: UsersRound, roles: ["HEAD"] },
-  { href: "/plan", label: "Планы преподавателей", icon: CalendarRange, roles: ["HEAD"] },
   { href: "/vkr-types", label: "Виды ВКР", icon: ScrollText, roles: ["HEAD"] },
   { href: "/gek-chairs", label: "Председатели ГЭК", icon: FileBadge, roles: ["HEAD"] },
   { href: "/templates", label: "Шаблоны отчётов", icon: FileCog, roles: ["HEAD"] },
@@ -48,12 +51,12 @@ export function MobileNav({
 }) {
   const [open, setOpen] = useState(false);
   const pathname = usePathname();
-  const items = ITEMS.filter((i) => i.roles.includes(role));
 
-  // Закрываем панель при переходе на другую страницу
+  const academicItems = ACADEMIC_ITEMS.filter((i) => i.roles.includes(role));
+  const adminItems = ADMIN_ITEMS.filter((i) => i.roles.includes(role));
+
   useEffect(() => { setOpen(false); }, [pathname]);
 
-  // Esc для закрытия + блокируем скролл фона
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setOpen(false); };
@@ -78,7 +81,6 @@ export function MobileNav({
         <Menu className="h-5 w-5" />
       </Button>
 
-      {/* Backdrop */}
       <div
         onClick={() => setOpen(false)}
         className={cn(
@@ -88,7 +90,6 @@ export function MobileNav({
         aria-hidden="true"
       />
 
-      {/* Side panel */}
       <aside
         className={cn(
           "fixed right-0 top-0 z-50 h-full w-80 max-w-[90vw] bg-white border-l shadow-xl transition-transform duration-200 ease-out no-print flex flex-col",
@@ -127,7 +128,7 @@ export function MobileNav({
 
         {/* Nav links */}
         <nav className="flex-1 overflow-y-auto p-2 space-y-0.5">
-          {items.map((it) => {
+          {academicItems.map((it) => {
             const active = pathname === it.href || pathname.startsWith(it.href + "/");
             const Icon = it.icon;
             return (
@@ -144,6 +145,34 @@ export function MobileNav({
               </Link>
             );
           })}
+
+          {adminItems.length > 0 && (
+            <>
+              <div className="pt-3 pb-1 px-3">
+                <div className="border-t" />
+                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground pt-3">
+                  Администрирование
+                </p>
+              </div>
+              {adminItems.map((it) => {
+                const active = pathname === it.href || pathname.startsWith(it.href + "/");
+                const Icon = it.icon;
+                return (
+                  <Link
+                    key={it.href}
+                    href={it.href}
+                    className={cn(
+                      "flex items-center gap-3 rounded-md px-3 py-2.5 text-sm hover:bg-accent transition-colors",
+                      active && "bg-accent font-medium"
+                    )}
+                  >
+                    <Icon className="h-4 w-4 shrink-0" />
+                    <span className="truncate">{it.label}</span>
+                  </Link>
+                );
+              })}
+            </>
+          )}
         </nav>
 
         {/* Footer: logout */}

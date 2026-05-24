@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { admissionLabel, formatDate, gradeIsPassing } from "@/lib/utils";
 import { X, Printer, Search } from "lucide-react";
+import type { TeacherListFilters } from "@/lib/teacher-plan-display";
 
 export type StateExamRow = {
   id: string;
@@ -26,12 +27,18 @@ export type StateExamRow = {
   chairName: string | null;
 };
 
-export function TeacherStateExamView({ rows }: { rows: StateExamRow[] }) {
+export function TeacherStateExamView({
+  rows,
+  initialFilters,
+}: {
+  rows: StateExamRow[];
+  initialFilters?: TeacherListFilters;
+}) {
   const [search, setSearch] = useState("");
   const [speciality, setSpeciality] = useState("");
   const [course, setCourse] = useState("");
-  const [groupName, setGroupName] = useState("");
-  const [studentId, setStudentId] = useState("");
+  const [groupName, setGroupName] = useState(initialFilters?.group ?? "");
+  const [studentId, setStudentId] = useState(initialFilters?.studentId ?? "");
 
   const specialities = useMemo(() => Array.from(new Set(rows.map((r) => r.groupSpeciality).filter(Boolean))).sort(), [rows]);
   const afterSpec = useMemo(() => speciality ? rows.filter((r) => r.groupSpeciality === speciality) : rows, [rows, speciality]);

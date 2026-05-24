@@ -16,9 +16,6 @@ export default async function GekChairsPage() {
       <div className="flex items-end justify-between gap-3 flex-wrap">
         <div>
           <h1 className="text-2xl font-semibold">Председатели ГЭК</h1>
-          <p className="text-muted-foreground text-sm">
-            Назначаются приказом для каждой группы и учебного года.
-          </p>
         </div>
         <GekChairForm trigger={<Button><Plus className="h-4 w-4 mr-2" />Добавить</Button>} />
       </div>

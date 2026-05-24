@@ -65,8 +65,24 @@ export function StudentProfileForm({
           <F label="Дата зачисления" err={errors.enrollmentDate?.message}><Input type="date" {...register("enrollmentDate")} /></F>
           <F label="Приказ о зачислении" err={errors.enrollmentOrder?.message} className="sm:col-span-2"><Input {...register("enrollmentOrder")} /></F>
           <F label="Текущий курс" err={errors.currentCourse?.message}><Input type="number" min={1} max={6} {...register("currentCourse")} /></F>
-          <F label="Дата отчисления (если есть)" err={errors.expulsionDate?.message}><Input type="date" {...register("expulsionDate")} /></F>
-          <F label="Приказ об отчислении (если есть)" err={errors.expulsionOrder?.message} className="sm:col-span-2"><Input {...register("expulsionOrder")} /></F>
+        </div>
+      </section>
+
+      <section className="space-y-3">
+        <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Отчисление</h3>
+        <p className="text-xs text-muted-foreground -mt-1">При указании обоих полей студент автоматически переводится в архив.</p>
+        <div className="grid sm:grid-cols-2 gap-4">
+          <F label="Дата отчисления" err={errors.expulsionDate?.message}><Input type="date" {...register("expulsionDate")} /></F>
+          <F label="Приказ об отчислении" err={errors.expulsionOrder?.message}><Input {...register("expulsionOrder")} /></F>
+        </div>
+      </section>
+
+      <section className="space-y-3">
+        <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Академический отпуск</h3>
+        <p className="text-xs text-muted-foreground -mt-1">При указании обоих полей студент переходит в архив (акад. отпуск).</p>
+        <div className="grid sm:grid-cols-2 gap-4">
+          <F label="Дата акад. отпуска" err={errors.academicLeaveDate?.message}><Input type="date" {...register("academicLeaveDate")} /></F>
+          <F label="Приказ об акад. отпуске" err={errors.academicLeaveOrder?.message}><Input {...register("academicLeaveOrder")} /></F>
         </div>
       </section>
 

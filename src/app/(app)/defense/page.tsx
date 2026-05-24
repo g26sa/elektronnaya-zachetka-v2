@@ -1,55 +1,69 @@
+import Link from "next/link";
 import { requireSession } from "@/lib/auth";
 import type { Admission } from "@/types/enums";
 import { prisma } from "@/lib/db";
 import { can } from "@/lib/rbac";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { admissionLabel, formatDate } from "@/lib/utils";
 import { DefenseForm } from "./DefenseForm";
 import { TeacherDefenseView, type DefenseRow } from "./TeacherDefenseView";
 import { getTeacherPlan } from "@/lib/teacherPlan";
-import { Pencil } from "lucide-react";
+import { Pencil, Printer } from "lucide-react";
 
-export default async function DefensePage({ searchParams }: { searchParams: Promise<{ studentId?: string }> }) {
+export default async function DefensePage({
+  searchParams,
+}: {
+  searchParams: Promise<{
+    studentId?: string; speciality?: string; course?: string; group?: string;
+    admission?: string; dateFrom?: string; dateTo?: string;
+  }>;
+}) {
   const session = await requireSession();
   const params = await searchParams;
+
   let studentId: string | null = params.studentId ?? null;
   if (session.role === "STUDENT") {
     const me = await prisma.student.findUnique({ where: { userId: session.userId } });
     studentId = me?.id ?? null;
   }
 
-  if (session.role === "TEACHER") return <TeacherFlow teacherId={session.userId} />;
-  const [students, chairs, vkr] = await Promise.all([
-    prisma.student.findMany({ include: { user: true, group: true }, orderBy: { user: { fullName: "asc" } } }),
-    prisma.user.findMany({ where: { role: { in: ["TEACHER", "HEAD"] } }, orderBy: { fullName: "asc" } }),
-    studentId
-      ? prisma.vKR.findUnique({ where: { studentId }, include: { defense: { include: { chair: true } }, supervisor: true } })
-      : null,
-  ]);
-  const oS = students.map((s) => ({ id: s.id, label: `${s.user.fullName} (${s.group.name})` }));
-  const oCh = chairs.map((c) => ({ id: c.id, label: c.fullName }));
+  if (session.role === "TEACHER") {
+    const { pickTeacherListFilters } = await import("@/lib/teacher-list-filters");
+    return (
+      <TeacherFlow
+        teacherId={session.userId}
+        initialFilters={pickTeacherListFilters(params)}
+      />
+    );
+  }
 
-  return (
-    <div className="space-y-6">
-      <div><h1 className="text-2xl font-semibold">Защита ВКР</h1></div>
+  // Student: show their own defense record
+  if (session.role === "STUDENT" && studentId) {
+    const [vkr, chairs] = await Promise.all([
+      prisma.vKR.findUnique({
+        where: { studentId },
+        include: { defense: { include: { chair: true } }, supervisor: true },
+      }),
+      prisma.user.findMany({ where: { role: { in: ["TEACHER", "HEAD"] } }, orderBy: { fullName: "asc" } }),
+    ]);
+    const oCh = chairs.map((c) => ({ id: c.id, label: c.fullName }));
 
-      {session.role !== "STUDENT" && (
-        <Card><CardContent className="p-4">
-          <form className="flex gap-2 items-end" action="/defense" method="get">
-            <select name="studentId" defaultValue={studentId ?? ""} className="flex h-9 max-w-md rounded-md border border-input bg-background px-3 text-sm">
-              <option value="">— выберите студента —</option>
-              {oS.map(o => <option key={o.id} value={o.id}>{o.label}</option>)}
-            </select>
-            <Button type="submit" variant="outline" size="sm">Показать</Button>
-          </form>
-        </CardContent></Card>
-      )}
+    if (!vkr) {
+      return (
+        <div className="space-y-6">
+          <h1 className="text-2xl font-semibold">Защита ВКР</h1>
+          <Card><CardContent className="p-6 text-sm text-muted-foreground">Сначала назначьте тему ВКР в разделе «Выпускная квалификационная работа».</CardContent></Card>
+        </div>
+      );
+    }
 
-      {!vkr ? (
-        <Card><CardContent className="p-6 text-sm text-muted-foreground">Сначала назначьте тему ВКР в разделе «Выпускная квалификационная работа».</CardContent></Card>
-      ) : (
+    const def = vkr.defense;
+    return (
+      <div className="space-y-6">
+        <h1 className="text-2xl font-semibold">Защита ВКР</h1>
         <Card>
           <CardHeader><CardTitle className="text-base flex items-center justify-between">
             <span>Защита: {vkr.topic}</span>
@@ -57,37 +71,175 @@ export default async function DefensePage({ searchParams }: { searchParams: Prom
               <DefenseForm
                 vkrId={vkr.id}
                 chairs={oCh}
-                initial={vkr.defense ? {
+                initial={def ? {
                   vkrId: vkr.id,
-                  admission: vkr.defense.admission as Admission,
-                  admissionDate: vkr.defense.admissionDate ? vkr.defense.admissionDate.toISOString().slice(0,10) : "",
-                  date: vkr.defense.date ? vkr.defense.date.toISOString().slice(0,10) : "",
-                  grade: vkr.defense.grade ?? "",
-                  chairId: vkr.defense.chairId ?? "",
-                  protocolNumber: vkr.defense.protocolNumber ?? "",
+                  admission: def.admission as Admission,
+                  admissionDate: def.admissionDate ? def.admissionDate.toISOString().slice(0, 10) : "",
+                  date: def.date ? def.date.toISOString().slice(0, 10) : "",
+                  grade: def.grade ?? "",
+                  chairId: def.chairId ?? "",
+                  protocolNumber: def.protocolNumber ?? "",
                 } : { vkrId: vkr.id }}
-                trigger={<Button size="sm" variant="outline"><Pencil className="h-4 w-4 mr-2" />{vkr.defense ? "Изменить" : "Создать"}</Button>}
+                trigger={<Button size="sm" variant="outline"><Pencil className="h-4 w-4 mr-2" />{def ? "Изменить" : "Создать"}</Button>}
               />
             )}
           </CardTitle></CardHeader>
           <CardContent>
-            {vkr.defense ? (
+            {def ? (
               <dl className="grid sm:grid-cols-2 gap-x-8 gap-y-3 text-sm">
-                <Fld label="Допуск" v={
-                  <Badge variant={vkr.defense.admission === "ADMITTED" ? "success" : "destructive"}>{admissionLabel(vkr.defense.admission)}</Badge>
-                } />
-                <Fld label="Дата допуска" v={formatDate(vkr.defense.admissionDate)} />
-                <Fld label="Дата защиты" v={formatDate(vkr.defense.date)} />
-                <Fld label="Оценка" v={vkr.defense.grade ?? "—"} />
-                <Fld label="Председатель ГЭК" v={vkr.defense.chair?.fullName ?? "—"} />
-                <Fld label="Протокол" v={vkr.defense.protocolNumber ?? "—"} />
+                <Fld label="Допуск" v={<Badge variant={def.admission === "ADMITTED" ? "success" : "destructive"}>{admissionLabel(def.admission)}</Badge>} />
+                <Fld label="Дата допуска" v={formatDate(def.admissionDate)} />
+                <Fld label="Дата защиты" v={formatDate(def.date)} />
+                <Fld label="Оценка" v={def.grade ?? "—"} />
+                <Fld label="Председатель ГЭК" v={def.chair?.fullName ?? "—"} />
+                <Fld label="Протокол" v={def.protocolNumber ?? "—"} />
               </dl>
             ) : (
               <p className="text-sm text-muted-foreground">Записи о защите ещё нет.</p>
             )}
           </CardContent>
         </Card>
-      )}
+      </div>
+    );
+  }
+
+  // HEAD: table view with filters
+  const [allStudents, chairs] = await Promise.all([
+    prisma.student.findMany({ include: { user: true, group: true }, orderBy: { user: { fullName: "asc" } } }),
+    prisma.user.findMany({ where: { role: { in: ["TEACHER", "HEAD"] } }, orderBy: { fullName: "asc" } }),
+  ]);
+
+  let filteredStudents = allStudents;
+  if (params.speciality) filteredStudents = filteredStudents.filter((s) => s.group.speciality === params.speciality);
+  if (params.course) filteredStudents = filteredStudents.filter((s) => String(s.currentCourse) === params.course);
+  if (params.group) filteredStudents = filteredStudents.filter((s) => s.group.name === params.group);
+
+  const specialities = Array.from(new Set(allStudents.map((s) => s.group.speciality).filter(Boolean) as string[])).sort();
+  const courses = Array.from(new Set(allStudents.map((s) => s.currentCourse))).sort((a, b) => a - b);
+  const groups = Array.from(new Set(filteredStudents.map((s) => s.group.name))).sort();
+
+  const filteredStudentIds = filteredStudents.map((s) => s.id);
+  const hasFilters = !!(params.speciality || params.course || params.group || studentId || params.admission || params.dateFrom || params.dateTo);
+
+  const defenses = await prisma.defense.findMany({
+    where: {
+      ...(studentId
+        ? { vkr: { studentId } }
+        : filteredStudentIds.length !== allStudents.length
+          ? { vkr: { studentId: { in: filteredStudentIds } } }
+          : {}),
+      ...(params.admission ? { admission: params.admission } : {}),
+      ...(params.dateFrom || params.dateTo ? {
+        date: {
+          ...(params.dateFrom ? { gte: new Date(params.dateFrom) } : {}),
+          ...(params.dateTo ? { lte: new Date(params.dateTo + "T23:59:59") } : {}),
+        }
+      } : {}),
+    },
+    include: {
+      vkr: { include: { student: { include: { user: true, group: true } }, supervisor: true } },
+      chair: true,
+    },
+    orderBy: [{ vkr: { student: { group: { name: "asc" } } } }],
+    ...(hasFilters ? {} : { take: 10 }),
+  });
+
+  const oCh = chairs.map((c) => ({ id: c.id, label: c.fullName }));
+
+  const reportParams = new URLSearchParams();
+  if (params.speciality) reportParams.set("speciality", params.speciality);
+  if (params.course) reportParams.set("course", params.course);
+  if (params.group) reportParams.set("group", params.group);
+  if (studentId) reportParams.set("studentId", studentId);
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-end justify-between gap-4 flex-wrap">
+        <h1 className="text-2xl font-semibold">Защита ВКР</h1>
+        <Button asChild variant="outline" size="sm">
+          <Link href={`/print/defense-report?${reportParams.toString()}`} target="_blank">
+            <Printer className="h-4 w-4 mr-2" />Отчёт
+          </Link>
+        </Button>
+      </div>
+
+      <Card>
+        <CardHeader className="pb-3"><CardTitle className="text-base">Фильтры</CardTitle></CardHeader>
+        <CardContent>
+          <form className="grid sm:grid-cols-3 gap-3" action="/defense" method="get">
+            <Sel name="speciality" label="Специальность" value={params.speciality ?? ""} opts={specialities.map((s) => ({ v: s, l: s }))} />
+            <Sel name="course" label="Курс" value={params.course ?? ""} opts={courses.map((c) => ({ v: String(c), l: String(c) }))} />
+            <Sel name="group" label="Группа" value={params.group ?? ""} opts={groups.map((g) => ({ v: g, l: g }))} />
+            <Sel name="studentId" label="Студент" value={studentId ?? ""} opts={filteredStudents.map((s) => ({ v: s.id, l: `${s.user.fullName} (${s.group.name})` }))} />
+            <Sel name="admission" label="Допуск" value={params.admission ?? ""} opts={[{ v: "ADMITTED", l: "Допущен" }, { v: "NOT_ADMITTED", l: "Не допущен" }]} />
+            <div className="space-y-1">
+              <label className="text-xs uppercase tracking-wide text-muted-foreground block">Дата защиты с</label>
+              <input type="date" name="dateFrom" defaultValue={params.dateFrom ?? ""} className="flex h-9 w-full rounded-md border border-input bg-background px-3 text-sm shadow-sm" />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs uppercase tracking-wide text-muted-foreground block">Дата защиты по</label>
+              <input type="date" name="dateTo" defaultValue={params.dateTo ?? ""} className="flex h-9 w-full rounded-md border border-input bg-background px-3 text-sm shadow-sm" />
+            </div>
+            <div className="flex gap-2 items-end sm:col-span-3">
+              <Button type="submit" variant="outline" size="sm">Применить</Button>
+              {hasFilters && <Button type="button" variant="ghost" size="sm" asChild><Link href="/defense">Сбросить</Link></Button>}
+              <span className="text-xs text-muted-foreground self-center ml-2">
+                {hasFilters ? `Найдено: ${defenses.length}` : `Последние 10 из всех`}
+              </span>
+            </div>
+          </form>
+        </CardContent>
+      </Card>
+
+      <Card><CardContent className="p-0">
+        <Table className="data-table">
+          <TableHeader><TableRow>
+            <TableHead>Студент</TableHead>
+            <TableHead>Группа</TableHead>
+            <TableHead>Тема ВКР</TableHead>
+            <TableHead>Допуск</TableHead>
+            <TableHead>Дата защиты</TableHead>
+            <TableHead>Оценка</TableHead>
+            <TableHead>Председатель ГЭК</TableHead>
+            <TableHead className="text-right">Действия</TableHead>
+          </TableRow></TableHeader>
+          <TableBody>
+            {defenses.length === 0 ? (
+              <TableRow><TableCell colSpan={8} className="text-center text-muted-foreground py-8">Записей нет.</TableCell></TableRow>
+            ) : defenses.map((d) => (
+              <TableRow key={d.id}>
+                <TableCell>{d.vkr.student.user.fullName}</TableCell>
+                <TableCell>{d.vkr.student.group.name}</TableCell>
+                <TableCell>{d.vkr.topic}</TableCell>
+                <TableCell>
+                  <Badge variant={d.admission === "ADMITTED" ? "success" : "destructive"}>{admissionLabel(d.admission)}</Badge>
+                </TableCell>
+                <TableCell className="whitespace-nowrap">{formatDate(d.date)}</TableCell>
+                <TableCell>{d.grade ?? "—"}</TableCell>
+                <TableCell>{d.chair?.fullName ?? "—"}</TableCell>
+                <TableCell className="text-right">
+                  {can(session, "defense:edit") && (
+                    <DefenseForm
+                      vkrId={d.vkrId}
+                      chairs={oCh}
+                      initial={{
+                        vkrId: d.vkrId,
+                        admission: d.admission as Admission,
+                        admissionDate: d.admissionDate ? d.admissionDate.toISOString().slice(0, 10) : "",
+                        date: d.date ? d.date.toISOString().slice(0, 10) : "",
+                        grade: d.grade ?? "",
+                        chairId: d.chairId ?? "",
+                        protocolNumber: d.protocolNumber ?? "",
+                      }}
+                      trigger={<Button variant="ghost" size="icon"><Pencil className="h-4 w-4" /></Button>}
+                    />
+                  )}
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </CardContent></Card>
     </div>
   );
 }
@@ -96,7 +248,13 @@ function Fld({ label, v }: { label: string; v: React.ReactNode }) {
   return <div><dt className="text-xs uppercase text-muted-foreground">{label}</dt><dd className="font-medium">{v}</dd></div>;
 }
 
-async function TeacherFlow({ teacherId }: { teacherId: string }) {
+async function TeacherFlow({
+  teacherId,
+  initialFilters,
+}: {
+  teacherId: string;
+  initialFilters?: import("@/lib/teacher-plan-display").TeacherListFilters;
+}) {
   const [plan, chairs] = await Promise.all([
     getTeacherPlan(teacherId),
     prisma.gekChair.findMany({ where: { isActive: true }, orderBy: [{ year: "desc" }, { fullName: "asc" }] }),
@@ -135,13 +293,24 @@ async function TeacherFlow({ teacherId }: { teacherId: string }) {
 
   return (
     <div className="space-y-4">
-      <div>
-        <h1 className="text-2xl font-semibold">Защита ВКР</h1>
-      </div>
+      <h1 className="text-2xl font-semibold">Защита ВКР</h1>
       <TeacherDefenseView
         rows={rows}
         chairs={chairs.map((c) => ({ id: c.id, fullName: c.fullName }))}
+        initialFilters={initialFilters}
       />
+    </div>
+  );
+}
+
+function Sel({ name, label, value, opts }: { name: string; label: string; value: string; opts: { v: string; l: string }[] }) {
+  return (
+    <div className="space-y-1">
+      <label className="text-xs uppercase tracking-wide text-muted-foreground block">{label}</label>
+      <select name={name} defaultValue={value} className="flex h-9 w-full rounded-md border border-input bg-background px-3 text-sm shadow-sm">
+        <option value="">— все —</option>
+        {opts.map((o) => <option key={o.v} value={o.v}>{o.l}</option>)}
+      </select>
     </div>
   );
 }
