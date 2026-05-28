@@ -28,7 +28,7 @@ export const stateExamSchema = z.object({
   admissionDate: z.string().optional().nullable(),
   date: z.string().optional().nullable(),
   grade: z.string().optional().nullable(),
-  chairId: z.string().optional().nullable(),
+  chairGekId: z.string().optional().nullable(),
   protocolNumber: z.string().optional().nullable(),
 });
 export type StateExamInput = z.infer<typeof stateExamSchema>;

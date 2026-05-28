@@ -2,7 +2,7 @@ import { notFound } from "next/navigation";
 import { requireRole } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { PrintBar } from "@/components/documents/PrintBar";
-import { DocumentHeader } from "@/components/documents/DocumentHeader";
+import { DocumentHeader, TeacherReportFooter } from "@/components/documents/DocumentHeader";
 import { assessmentTypeLabel, formatDate } from "@/lib/utils";
 
 /**
@@ -45,15 +45,16 @@ export default async function PlanRecordsPrintPage({
 
   return (
     <>
-      <PrintBar />
-      <div className="document p-[24mm]">
+      <PrintBar filename={`Ведомость — ${plan.discipline.name} — ${plan.group.name}`} />
+      <div className="document p-[15mm_20mm]">
         <DocumentHeader
           institution={institution}
-          title="Ведомость промежуточной аттестации"
+          title="Ведомость по дисциплине"
           subtitle={
             `${plan.discipline.name} · группа ${plan.group.name} · ${plan.semester.number} семестр (${plan.semester.academicYear})`
           }
           generatedAt={new Date()}
+          showDateInHeader={false}
         />
 
         <table>
@@ -98,6 +99,13 @@ export default async function PlanRecordsPrintPage({
             </tbody>
           </table>
         )}
+
+        <TeacherReportFooter
+          teacherName={session.fullName}
+          institution={institution}
+          date={new Date()}
+          showTeacherSignature={session.role !== "HEAD"}
+        />
       </div>
     </>
   );

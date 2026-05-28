@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { saveGekChair, deleteGekChair } from "./actions";
 import { Trash2 } from "lucide-react";
+import { useConfirm } from "@/components/ui/confirm-dialog";
 
 export function GekChairForm({
   trigger, initial,
@@ -75,15 +76,19 @@ export function GekChairForm({
 
 export function GekChairDeleteButton({ id, fullName }: { id: string; fullName: string }) {
   const [pending, startTransition] = useTransition();
+  const [ask, ConfirmNode] = useConfirm();
   return (
-    <Button variant="ghost" size="icon" disabled={pending} onClick={() => {
-      if (!confirm(`Удалить «${fullName}» из справочника?`)) return;
-      startTransition(async () => {
-        try { await deleteGekChair(id); }
-        catch (e) { alert(e instanceof Error ? e.message : "Ошибка"); }
-      });
-    }}>
-      <Trash2 className="h-4 w-4 text-destructive" />
-    </Button>
+    <>
+      {ConfirmNode}
+      <Button variant="ghost" size="icon" disabled={pending} onClick={async () => {
+        if (!(await ask(`Удалить «${fullName}» из справочника?`))) return;
+        startTransition(async () => {
+          try { await deleteGekChair(id); }
+          catch (e) { alert(e instanceof Error ? e.message : "Ошибка"); }
+        });
+      }}>
+        <Trash2 className="h-4 w-4 text-destructive" />
+      </Button>
+    </>
   );
 }

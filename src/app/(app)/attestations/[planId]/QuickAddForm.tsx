@@ -24,11 +24,12 @@ const schema = z.object({
 type Input = z.infer<typeof schema>;
 
 export function QuickAddForm({
-  trigger, planId, students,
+  trigger, planId, students, controlForm,
 }: {
   trigger: React.ReactNode;
   planId: string;
   students: Student[];
+  controlForm?: string;
 }) {
   const [open, setOpen] = useState(false);
   const [pending, startTransition] = useTransition();
@@ -39,7 +40,7 @@ export function QuickAddForm({
     defaultValues: {
       planId,
       studentId: "",
-      type: "EXAM",
+      type: (controlForm as Input["type"]) ?? "EXAM",
       grade: "",
       date: new Date().toISOString().slice(0, 10),
     },
@@ -65,6 +66,7 @@ export function QuickAddForm({
         <DialogHeader><DialogTitle>Выставить оценку</DialogTitle></DialogHeader>
         <form onSubmit={submit} className="grid sm:grid-cols-2 gap-4">
           <input type="hidden" {...register("planId")} />
+          <input type="hidden" {...register("type")} />
           <div className="space-y-1.5 sm:col-span-2">
             <Label>Студент</Label>
             <select
@@ -75,17 +77,6 @@ export function QuickAddForm({
               {students.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
             </select>
             {errors.studentId && <p className="text-xs text-destructive">{errors.studentId.message}</p>}
-          </div>
-          <div className="space-y-1.5">
-            <Label>Форма контроля</Label>
-            <select
-              {...register("type")}
-              className="flex h-9 w-full rounded-md border border-input bg-background px-3 text-sm shadow-sm"
-            >
-              <option value="EXAM">Экзамен</option>
-              <option value="CREDIT">Зачёт</option>
-              <option value="GRADED_CREDIT">Дифференцированный зачёт</option>
-            </select>
           </div>
           <GradeSelect {...register("grade")} err={errors.grade?.message} />
           <div className="space-y-1.5">

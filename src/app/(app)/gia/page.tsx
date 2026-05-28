@@ -10,6 +10,13 @@ import { TeacherVkrView, type VkrRow } from "./TeacherVkrView";
 import { getTeacherPlan } from "@/lib/teacherPlan";
 import { formatDate } from "@/lib/utils";
 import { Pencil, Printer, Eye } from "lucide-react";
+import {
+  courseFromGroupName,
+  filterGroupNamesByCourse,
+  filterItemsByGroupCourse,
+  uniqueCoursesFromGroupNames,
+} from "@/lib/group-course";
+import { AutoFilterForm } from "@/components/filters/AutoFilterForm";
 
 export default async function GiaPage({
   searchParams,
@@ -45,15 +52,20 @@ export default async function GiaPage({
 
   let filteredStudents = allStudents;
   if (params.speciality) filteredStudents = filteredStudents.filter((s) => s.group.speciality === params.speciality);
-  if (params.course) filteredStudents = filteredStudents.filter((s) => String(s.currentCourse) === params.course);
+  if (params.course) filteredStudents = filterItemsByGroupCourse(filteredStudents, params.course);
   if (params.group) filteredStudents = filteredStudents.filter((s) => s.group.name === params.group);
 
   const oS = allStudents.map((s) => ({ id: s.id, label: `${s.user.fullName} (${s.group.name})` }));
   const oT = teachers.map((t) => ({ id: t.id, label: t.fullName }));
 
   const specialities = Array.from(new Set(allStudents.map((s) => s.group.speciality).filter(Boolean) as string[])).sort();
-  const courses = Array.from(new Set(allStudents.map((s) => s.currentCourse))).sort((a, b) => a - b);
-  const groups = Array.from(new Set(filteredStudents.map((s) => s.group.name))).sort();
+  const courses = uniqueCoursesFromGroupNames(allStudents.map((s) => s.group.name));
+  const groups = params.course
+    ? filterGroupNamesByCourse(
+        (params.speciality ? filteredStudents : allStudents).map((s) => s.group.name),
+        params.course
+      )
+    : [];
 
   // Если выбран конкретный студент — показываем его карточку
   if (studentId) {
@@ -149,10 +161,17 @@ export default async function GiaPage({
       <Card>
         <CardHeader className="pb-3"><CardTitle className="text-base">Фильтры</CardTitle></CardHeader>
         <CardContent>
-          <form className="grid sm:grid-cols-3 gap-3" action="/gia" method="get">
+          <AutoFilterForm action="/gia" className="grid sm:grid-cols-3 gap-3">
             <Sel name="speciality" label="Специальность" value={params.speciality ?? ""} opts={specialities.map((s) => ({ v: s, l: s }))} />
             <Sel name="course" label="Курс" value={params.course ?? ""} opts={courses.map((c) => ({ v: String(c), l: String(c) }))} />
-            <Sel name="group" label="Группа" value={params.group ?? ""} opts={groups.map((g) => ({ v: g, l: g }))} />
+            <Sel
+              name="group"
+              label="Группа"
+              value={params.group ?? ""}
+              opts={groups.map((g) => ({ v: g, l: g }))}
+              disabled={!params.course}
+              emptyLabel={params.course ? "— все —" : "Сначала курс"}
+            />
             <div className="space-y-1">
               <label className="text-xs uppercase tracking-wide text-muted-foreground block">Дата утверждения с</label>
               <input type="date" name="dateFrom" defaultValue={params.dateFrom ?? ""} className="flex h-9 w-full rounded-md border border-input bg-background px-3 text-sm shadow-sm" />
@@ -162,13 +181,9 @@ export default async function GiaPage({
               <input type="date" name="dateTo" defaultValue={params.dateTo ?? ""} className="flex h-9 w-full rounded-md border border-input bg-background px-3 text-sm shadow-sm" />
             </div>
             <div className="flex gap-2 items-end sm:col-span-3">
-              <Button type="submit" variant="outline" size="sm">Применить</Button>
               {hasFilters && <Button type="button" variant="ghost" size="sm" asChild><Link href="/gia">Сбросить</Link></Button>}
-              <span className="text-xs text-muted-foreground self-center ml-2">
-                {hasFilters ? `Найдено: ${vkrs.length}` : `Последние 10 из всех`}
-              </span>
             </div>
-          </form>
+          </AutoFilterForm>
         </CardContent>
       </Card>
 
@@ -229,37 +244,65 @@ async function TeacherFlow({
   teacherId: string;
   initialFilters?: import("@/lib/teacher-plan-display").TeacherListFilters;
 }) {
-  const [plan, vkrs, vkrTypes] = await Promise.all([
+  const [plan, vkrTypes, supervisorVkrs] = await Promise.all([
     getTeacherPlan(teacherId),
+    prisma.vkrType.findMany({ where: { isActive: true }, orderBy: { sortOrder: "asc" } }),
     prisma.vKR.findMany({
       where: { supervisorId: teacherId },
-      include: {
-        student: { include: { user: true, group: true } },
-      },
+      select: { studentId: true },
     }),
-    prisma.vkrType.findMany({ where: { isActive: true }, orderBy: { sortOrder: "asc" } }),
   ]);
 
   const oV = vkrTypes.map((v) => ({ id: v.id, name: v.name }));
 
   const vkrPlan = plan.filter((p) => p.kind === "VKR" && p.studentId);
-  const planStudentIds = new Set(vkrPlan.map((p) => p.studentId!));
+  const studentIds = Array.from(
+    new Set([
+      ...vkrPlan.map((p) => p.studentId!),
+      ...supervisorVkrs.map((v) => v.studentId),
+    ])
+  );
 
-  const rows: VkrRow[] = vkrs
-    .filter((v) => planStudentIds.size === 0 || planStudentIds.has(v.studentId))
-    .map((v) => ({
-      id: v.id,
-      studentId: v.studentId,
-      studentName: v.student.user.fullName,
-      groupId: v.student.group.id,
-      groupName: v.student.group.name,
-      groupSpeciality: v.student.group.speciality ?? "",
-      course: v.student.currentCourse,
-      topic: v.topic,
-      type: v.type,
-      approvedOrder: v.approvedOrder,
-      approvedDate: v.approvedDate,
-    }));
+  if (studentIds.length === 0) {
+    return (
+      <div className="space-y-4">
+        <h1 className="text-2xl font-semibold">Выпускная квалификационная работа</h1>
+        <TeacherVkrView rows={[]} vkrTypes={oV} initialFilters={initialFilters} />
+      </div>
+    );
+  }
+
+  const [students, vkrs] = await Promise.all([
+    prisma.student.findMany({
+      where: { id: { in: studentIds } },
+      include: { user: true, group: true },
+    }),
+    prisma.vKR.findMany({
+      where: { studentId: { in: studentIds } },
+      include: { defense: true },
+    }),
+  ]);
+  const vkrByStudent = new Map(vkrs.map((v) => [v.studentId, v]));
+
+  const rows: VkrRow[] = students.map((s) => {
+    const v = vkrByStudent.get(s.id) ?? null;
+    const planEntry = vkrPlan.find((p) => p.studentId === s.id);
+    return {
+      id: v?.id ?? null,
+      studentId: s.id,
+      studentName: s.user.fullName,
+      groupId: s.group.id,
+      groupName: s.group.name,
+      groupSpeciality: s.group.speciality ?? "",
+      course: courseFromGroupName(s.group.name) ?? planEntry?.semester?.course ?? s.currentCourse,
+      topic: v?.topic ?? null,
+      type: v?.type ?? null,
+      approvedOrder: v?.approvedOrder ?? null,
+      approvedDate: v?.approvedDate ?? null,
+      admission: (v?.defense?.admission as "ADMITTED" | "NOT_ADMITTED" | null) ?? null,
+      admissionDate: v?.defense?.admissionDate ?? null,
+    };
+  });
 
   return (
     <div className="space-y-4">
@@ -269,12 +312,26 @@ async function TeacherFlow({
   );
 }
 
-function Sel({ name, label, value, opts }: { name: string; label: string; value: string; opts: { v: string; l: string }[] }) {
+function Sel({
+  name, label, value, opts, disabled, emptyLabel = "— все —",
+}: {
+  name: string;
+  label: string;
+  value: string;
+  opts: { v: string; l: string }[];
+  disabled?: boolean;
+  emptyLabel?: string;
+}) {
   return (
     <div className="space-y-1">
       <label className="text-xs uppercase tracking-wide text-muted-foreground block">{label}</label>
-      <select name={name} defaultValue={value} className="flex h-9 w-full rounded-md border border-input bg-background px-3 text-sm shadow-sm">
-        <option value="">— все —</option>
+      <select
+        name={name}
+        defaultValue={value}
+        disabled={disabled}
+        className="flex h-9 w-full rounded-md border border-input bg-background px-3 text-sm shadow-sm disabled:opacity-50"
+      >
+        <option value="">{emptyLabel}</option>
         {opts.map((o) => <option key={o.v} value={o.v}>{o.l}</option>)}
       </select>
     </div>

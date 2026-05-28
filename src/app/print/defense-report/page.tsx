@@ -1,8 +1,9 @@
 import { requireRole } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { PrintBar } from "@/components/documents/PrintBar";
-import { DocumentHeader, DocumentSignatures } from "@/components/documents/DocumentHeader";
+import { DocumentHeader, TeacherReportFooter } from "@/components/documents/DocumentHeader";
 import { admissionLabel, formatDate } from "@/lib/utils";
+import { groupMatchesCourse } from "@/lib/group-course";
 
 export default async function DefenseReportPage({
   searchParams,
@@ -36,7 +37,7 @@ export default async function DefenseReportPage({
     if (!v.defense) return false;
     const sp2 = v.student.group.speciality ?? "";
     if (sp.speciality && sp2 !== sp.speciality) return false;
-    if (sp.course && String(v.student.currentCourse) !== sp.course) return false;
+    if (sp.course && !groupMatchesCourse(v.student.group.name, sp.course)) return false;
     if (sp.group && v.student.group.name !== sp.group) return false;
     if (sp.studentId && v.studentId !== sp.studentId) return false;
     return true;
@@ -44,13 +45,13 @@ export default async function DefenseReportPage({
 
   return (
     <>
-      <PrintBar />
-      <div className="document p-[24mm]">
+      <PrintBar filename="Отчёт по защитам ВКР" />
+      <div className="document p-[15mm_20mm]">
         <DocumentHeader
           institution={institution}
           title="Отчёт по защитам ВКР"
-          subtitle={session.fullName}
           generatedAt={new Date()}
+          showDateInHeader={false}
         />
 
         {rows.length === 0 ? (
@@ -59,14 +60,14 @@ export default async function DefenseReportPage({
           <table>
             <thead>
               <tr>
-                <th>№</th>
-                <th>Студент</th>
-                <th>Группа</th>
-                <th>Тема ВКР</th>
-                <th>Допуск</th>
-                <th>Дата защиты</th>
-                <th>Оценка</th>
-                <th>Председатель ГЭК</th>
+                <th style={{ width: "4%" }}>№</th>
+                <th style={{ width: "18%" }}>Студент</th>
+                <th style={{ width: "8%" }}>Группа</th>
+                <th style={{ width: "24%" }}>Тема ВКР</th>
+                <th style={{ width: "10%" }}>Допуск</th>
+                <th style={{ width: "10%" }}>Дата</th>
+                <th style={{ width: "8%" }}>Оценка</th>
+                <th style={{ width: "18%" }}>Председатель ГЭК</th>
               </tr>
             </thead>
             <tbody>
@@ -85,10 +86,11 @@ export default async function DefenseReportPage({
             </tbody>
           </table>
         )}
-        <p className="text-[11px] mt-3">Всего: {rows.length}.</p>
-        <DocumentSignatures
-          left={{ title: session.role === "HEAD" ? "Заведующий отделением" : "Преподаватель", name: session.fullName }}
-          right={{ title: "Дата" }}
+        <TeacherReportFooter
+          teacherName={session.fullName}
+          institution={institution}
+          date={new Date()}
+          showTeacherSignature={session.role !== "HEAD"}
         />
       </div>
     </>

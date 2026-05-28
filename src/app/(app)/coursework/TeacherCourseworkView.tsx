@@ -12,7 +12,9 @@ import { CourseWorkQuickForm, type PlanSlot, type StudentRef } from "./CourseWor
 import { deleteCourseWork } from "./actions";
 import { gradeIsPassing, formatDate } from "@/lib/utils";
 import { Plus, X, Printer, Pencil, Trash2, Search } from "lucide-react";
+import { useConfirm } from "@/components/ui/confirm-dialog";
 import type { TeacherListFilters } from "@/lib/teacher-plan-display";
+import { filterGroupNamesByCourse, groupMatchesCourse, uniqueCoursesFromGroupNames } from "@/lib/group-course";
 
 export type CourseworkRow = {
   id: string;
@@ -62,16 +64,16 @@ export function TeacherCourseworkView({
     [rows, speciality]
   );
   const courses = useMemo(
-    () => Array.from(new Set(filteredAfterSpec.map((r) => String(r.course)))).sort(),
+    () => uniqueCoursesFromGroupNames(filteredAfterSpec.map((r) => r.groupName)),
     [filteredAfterSpec]
   );
-  const filteredAfterCourse = useMemo(
-    () => (course ? filteredAfterSpec.filter((r) => String(r.course) === course) : filteredAfterSpec),
+  const groups = useMemo(
+    () => filterGroupNamesByCourse(filteredAfterSpec.map((r) => r.groupName), course),
     [filteredAfterSpec, course]
   );
-  const groups = useMemo(
-    () => Array.from(new Set(filteredAfterCourse.map((r) => r.groupName))).sort(),
-    [filteredAfterCourse]
+  const filteredAfterCourse = useMemo(
+    () => (course ? filteredAfterSpec.filter((r) => groupMatchesCourse(r.groupName, course)) : filteredAfterSpec),
+    [filteredAfterSpec, course]
   );
   const filteredAfterGroup = useMemo(
     () => (groupName ? filteredAfterCourse.filter((r) => r.groupName === groupName) : filteredAfterCourse),
@@ -94,7 +96,7 @@ export function TeacherCourseworkView({
     const q = search.trim().toLowerCase();
     return rows.filter((r) => {
       if (speciality && r.groupSpeciality !== speciality) return false;
-      if (course && String(r.course) !== course) return false;
+      if (course && !groupMatchesCourse(r.groupName, course)) return false;
       if (groupName && r.groupName !== groupName) return false;
       if (discipline && r.disciplineName !== discipline) return false;
       if (semester && String(r.semesterNumber) !== semester) return false;
@@ -143,8 +145,15 @@ export function TeacherCourseworkView({
         <CardContent className="p-4 space-y-3">
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-7 gap-3">
             <Sel label="Специальность" value={speciality} onChange={(v) => { setSpeciality(v); setCourse(""); setGroupName(""); }} options={specialities} />
-            <Sel label="Курс" value={course} onChange={(v) => { setCourse(v); setGroupName(""); }} options={courses} disabled={courses.length === 0} />
-            <Sel label="Группа" value={groupName} onChange={(v) => { setGroupName(v); setStudentId(""); }} options={groups} disabled={groups.length === 0} />
+            <Sel label="Курс" value={course} onChange={(v) => { setCourse(v); setGroupName(""); }} options={courses.map(String)} disabled={courses.length === 0} />
+            <Sel
+              label="Группа"
+              value={groupName}
+              onChange={(v) => { setGroupName(v); setStudentId(""); }}
+              options={groups}
+              disabled={!course || groups.length === 0}
+              emptyLabel={course ? "— все —" : "Сначала курс"}
+            />
             <Sel label="Дисциплина" value={discipline} onChange={setDiscipline} options={disciplines} />
             <Sel label="Семестр" value={semester} onChange={setSemester} options={semesters} />
             <Sel
@@ -164,12 +173,7 @@ export function TeacherCourseworkView({
               optionsLabels={{ graded: "С оценкой", topicOnly: "Только тема" }}
             />
           </div>
-          <div className="flex items-center justify-between gap-2 text-xs">
-            <span className="text-muted-foreground">
-              {hasFilters
-                ? <>Найдено: <span className="font-medium">{filtered.length}</span></>
-                : <>Показаны последние <span className="font-medium">{visible.length}</span> из {rows.length}</>}
-            </span>
+          <div className="flex items-center justify-end gap-2 text-xs">
             <div className="flex gap-2">
               <Button asChild variant="outline" size="sm">
                 <Link href={reportUrl} target="_blank">
@@ -215,7 +219,9 @@ export function TeacherCourseworkView({
               {visible.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={8} className="text-center text-muted-foreground py-8">
-                    {hasFilters ? "По выбранным фильтрам ничего не найдено." : "Курсовых работ пока нет."}
+                    {hasFilters
+                      ? "По выбранным фильтрам записей нет. Нажмите «Добавить» чтобы создать курсовую работу."
+                      : "Курсовых работ пока нет. Нажмите «Добавить» чтобы создать первую запись."}
                   </TableCell>
                 </TableRow>
               ) : visible.map((r) => (
@@ -233,6 +239,7 @@ function Row({
   r, planSlots, students,
 }: { r: CourseworkRow; planSlots: PlanSlot[]; students: StudentRef[] }) {
   const [pending, startTransition] = useTransition();
+  const [ask, ConfirmNode] = useConfirm();
   return (
     <TableRow>
       <TableCell>{r.studentName}</TableCell>
@@ -251,6 +258,7 @@ function Row({
         {r.grade ? formatDate(r.date) : <span className="text-muted-foreground">выдана {formatDate(r.assignedAt)}</span>}
       </TableCell>
       <TableCell className="text-right">
+        {ConfirmNode}
         <div className="flex justify-end gap-1">
           <CourseWorkQuickForm
             planSlots={planSlots}
@@ -273,8 +281,8 @@ function Row({
             size="icon"
             disabled={pending}
             title="Удалить"
-            onClick={() => {
-              if (!confirm("Удалить эту курсовую?")) return;
+            onClick={async () => {
+              if (!(await ask("Удалить эту курсовую?"))) return;
               startTransition(async () => {
                 try { await deleteCourseWork(r.id); }
                 catch (e) { alert(e instanceof Error ? e.message : "Ошибка"); }
@@ -291,7 +299,7 @@ function Row({
 
 // ────────────────────────────────────────────────────────────────────────────
 function Sel<T extends string>({
-  label, value, onChange, options, disabled, optionsLabels, keyFn, labelFn,
+  label, value, onChange, options, disabled, optionsLabels, keyFn, labelFn, emptyLabel = "— все —",
 }: {
   label: string;
   value: T | "";
@@ -301,6 +309,7 @@ function Sel<T extends string>({
   optionsLabels?: Record<string, string>;
   keyFn?: (label: T) => string;
   labelFn?: (id: string) => string;
+  emptyLabel?: string;
 }) {
   // когда у нас value хранит уже id, но options — labels → берём через keyFn
   const display = labelFn && value ? labelFn(value) : value;
@@ -318,7 +327,7 @@ function Sel<T extends string>({
         disabled={disabled}
         className="flex h-9 w-full rounded-md border border-input bg-background px-3 text-sm shadow-sm disabled:opacity-50"
       >
-        <option value="">— все —</option>
+        <option value="">{emptyLabel}</option>
         {options.map((o) => <option key={o} value={o}>{optionsLabels?.[o] ?? o}</option>)}
       </select>
     </div>

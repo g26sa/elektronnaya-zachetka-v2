@@ -1,6 +1,7 @@
 "use client";
 import { forwardRef } from "react";
 import { Label } from "@/components/ui/label";
+import { controlledSelectProps } from "./controlled-select";
 
 /**
  * Выпадающий список оценок. Унифицирован для всех форм.
@@ -18,7 +19,7 @@ export const GradeSelect = forwardRef<HTMLSelectElement, {
   /** Если true — только «зачтено/не зачтено» (для CREDIT) */
   passOnly?: boolean;
 } & React.SelectHTMLAttributes<HTMLSelectElement>>(function GradeSelect(
-  { label = "Оценка", err, className, includePass = true, passOnly = false, ...rest }, ref
+  { label = "Оценка", err, className, includePass = true, passOnly = false, value, ...rest }, ref
 ) {
   const options = passOnly
     ? PASS_GRADES
@@ -28,7 +29,7 @@ export const GradeSelect = forwardRef<HTMLSelectElement, {
       <Label>{label}</Label>
       <select
         ref={ref}
-        {...rest}
+        {...controlledSelectProps({ ...rest, value })}
         className="flex h-9 w-full rounded-md border border-input bg-background px-3 text-sm shadow-sm"
       >
         <option value="">— выберите —</option>

@@ -9,6 +9,11 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Eye, Search, X, ArrowUpDown, ArrowUp, ArrowDown, Printer } from "lucide-react";
+import {
+  filterGroupNamesByCourse,
+  groupMatchesCourse,
+  uniqueCoursesFromGroupNames,
+} from "@/lib/group-course";
 
 const ARCHIVE_REASON_LABEL: Record<string, string> = {
   EXPULSION: "Отчислен",
@@ -66,18 +71,21 @@ export function StudentsExplorer({
   );
 
   const courses = useMemo(
-    () => Array.from(new Set(studentsAfterSpec.map((s) => s.currentCourse))).sort((a, b) => a - b),
+    () => uniqueCoursesFromGroupNames(studentsAfterSpec.map((s) => s.group.name)),
     [studentsAfterSpec]
   );
 
   const studentsAfterCourse = useMemo(
-    () => (course ? studentsAfterSpec.filter((s) => String(s.currentCourse) === course) : studentsAfterSpec),
+    () =>
+      course
+        ? studentsAfterSpec.filter((s) => groupMatchesCourse(s.group.name, course))
+        : studentsAfterSpec,
     [studentsAfterSpec, course]
   );
 
   const groups = useMemo(
-    () => Array.from(new Set(studentsAfterCourse.map((s) => s.group.name))).sort(),
-    [studentsAfterCourse]
+    () => filterGroupNamesByCourse(studentsAfterSpec.map((s) => s.group.name), course),
+    [studentsAfterSpec, course]
   );
 
   const rows = useMemo(() => {
@@ -117,60 +125,6 @@ export function StudentsExplorer({
   const hasFilters = !!(search || speciality || course || groupName);
   const limitApplies = !hasFilters && !showAll;
   const visibleRows = limitApplies ? rows.slice(0, defaultLimit) : rows;
-
-  // Вертикальный отчёт
-  function printReport() {
-    const w = window.open("", "_blank");
-    if (!w) return;
-    const now = new Date().toLocaleDateString("ru-RU");
-    const title = isArchive ? "Архив студентов" : "Список студентов";
-    const rowsHtml = rows.map((s, i) => `
-      <tr>
-        <td>${i + 1}</td>
-        <td>${s.fullName}</td>
-        <td>${s.group.name}</td>
-        <td>${s.recordBookNumber}</td>
-        <td>${s.currentCourse}</td>
-        ${isArchive ? `<td>${ARCHIVE_REASON_LABEL[s.archiveReason ?? ""] ?? "—"}</td>` : ""}
-      </tr>`).join("");
-    w.document.write(`<!DOCTYPE html><html lang="ru"><head><meta charset="utf-8">
-      <title>${title}</title>
-      <style>
-        body { font-family: Arial, sans-serif; font-size: 11pt; margin: 20mm; }
-        h2 { font-size: 14pt; margin-bottom: 4px; }
-        p { margin: 2px 0 12px; font-size: 10pt; color: #555; }
-        table { width: 100%; border-collapse: collapse; margin-top: 10px; }
-        th, td { border: 1px solid #333; padding: 4px 6px; font-size: 10pt; }
-        th { background: #f0f0f0; text-align: left; }
-        .signatures { margin-top: 40px; display: flex; justify-content: space-between; }
-        .sig { width: 45%; }
-        .sig-line { border-top: 1px solid #333; margin-top: 30px; }
-        @media print { @page { margin: 20mm; size: A4 portrait; } }
-      </style></head><body>
-      <h2>${title}</h2>
-      <p>Дата формирования: ${now}</p>
-      <table>
-        <thead><tr>
-          <th>#</th><th>ФИО</th><th>Группа</th><th>№ зач. кн.</th><th>Курс</th>
-          ${isArchive ? "<th>Причина</th>" : ""}
-        </tr></thead>
-        <tbody>${rowsHtml}</tbody>
-      </table>
-      <div class="signatures">
-        <div class="sig">
-          <div>Заведующий отделением</div>
-          <div class="sig-line"></div>
-          <div style="font-size:9pt;color:#666;margin-top:4px">подпись / расшифровка</div>
-        </div>
-        <div class="sig">
-          <div>Дата</div>
-          <div class="sig-line"></div>
-        </div>
-      </div>
-      <script>window.onload=()=>{window.print();}<\/script>
-      </body></html>`);
-    w.document.close();
-  }
 
   return (
     <div className="space-y-4">
@@ -216,20 +170,30 @@ export function StudentsExplorer({
               value={groupName}
               onChange={setGroupName}
               options={groups}
-              placeholder="— все —"
-              disabled={groups.length === 0}
+              placeholder={course ? "— все —" : "Сначала выберите курс"}
+              disabled={!course || groups.length === 0}
             />
           </div>
 
           <div className="flex items-center justify-between gap-2">
-            <div className="text-xs text-muted-foreground">
-              {limitApplies
-                ? <>Показаны последние <span className="font-medium">{visibleRows.length}</span> из {rows.length}</>
-                : <>Найдено: <span className="font-medium">{rows.length}</span> из {students.length}</>}
-            </div>
-            <div className="flex items-center gap-2">
-              <Button variant="outline" size="sm" onClick={printReport}>
-                <Printer className="h-3 w-3 mr-1" />Отчёт
+            {limitApplies && (
+              <div className="text-xs text-muted-foreground">
+                Показаны последние <span className="font-medium">{visibleRows.length}</span> из {rows.length}
+              </div>
+            )}
+            <div className="flex items-center gap-2 ml-auto">
+              <Button variant="outline" size="sm" asChild>
+                <Link
+                  href={`/print/students?${new URLSearchParams({
+                    ...(isArchive ? { tab: "archive" } : {}),
+                    ...(speciality ? { speciality } : {}),
+                    ...(course ? { course } : {}),
+                    ...(groupName ? { group: groupName } : {}),
+                  }).toString()}`}
+                  target="_blank"
+                >
+                  <Printer className="h-3 w-3 mr-1" />Отчёт
+                </Link>
               </Button>
               {limitApplies && rows.length > (defaultLimit ?? 10) && (
                 <Button variant="ghost" size="sm" onClick={() => setShowAll(true)}>
@@ -285,9 +249,15 @@ export function StudentsExplorer({
                   </TableCell>
                   <TableCell className="text-right">
                     <div className="flex justify-end gap-1">
-                      <Button asChild variant="ghost" size="icon" title="Открыть аттестации">
-                        <Link href={`/attestations?studentId=${s.id}`}><Eye className="h-4 w-4" /></Link>
-                      </Button>
+                      {(s._count.assessments + s._count.courseWorks + s._count.practices) > 0 ? (
+                        <Button asChild variant="ghost" size="icon" title="Открыть аттестации">
+                          <Link href={`/attestations?studentId=${s.id}`}><Eye className="h-4 w-4" /></Link>
+                        </Button>
+                      ) : (
+                        <Button variant="ghost" size="icon" title="Нет данных" disabled>
+                          <Eye className="h-4 w-4" />
+                        </Button>
+                      )}
                       {canEditProfile && (
                         <Button asChild variant="outline" size="sm">
                           <Link href={`/students/${s.id}`}>Профиль</Link>

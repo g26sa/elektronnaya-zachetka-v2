@@ -8,11 +8,15 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { PracticeQuickForm, type PracticePlanSlot, type StudentRef } from "./PracticeQuickForm";
+import { PracticeGroupForm } from "./PracticeGroupForm";
+import { PracticeStudentEditForm } from "./PracticeStudentEditForm";
+import type { PracticePlanSlot, StudentRef } from "./practice-types";
 import { deletePractice } from "./actions";
 import { formatDate, gradeIsPassing, practiceKindLabel } from "@/lib/utils";
 import { Plus, X, Printer, Pencil, Trash2, Search } from "lucide-react";
+import { useConfirm } from "@/components/ui/confirm-dialog";
 import type { TeacherListFilters } from "@/lib/teacher-plan-display";
+import { filterGroupNamesByCourse, groupMatchesCourse, uniqueCoursesFromGroupNames } from "@/lib/group-course";
 
 export type PracticeRow = {
   id: string;
@@ -65,16 +69,16 @@ export function TeacherPracticeView({
     [rows, speciality]
   );
   const courses = useMemo(
-    () => Array.from(new Set(afterSpec.map((r) => String(r.course)))).sort(),
+    () => uniqueCoursesFromGroupNames(afterSpec.map((r) => r.groupName)),
     [afterSpec]
   );
-  const afterCourse = useMemo(
-    () => (course ? afterSpec.filter((r) => String(r.course) === course) : afterSpec),
+  const groups = useMemo(
+    () => filterGroupNamesByCourse(afterSpec.map((r) => r.groupName), course),
     [afterSpec, course]
   );
-  const groups = useMemo(
-    () => Array.from(new Set(afterCourse.map((r) => r.groupName))).sort(),
-    [afterCourse]
+  const afterCourse = useMemo(
+    () => (course ? afterSpec.filter((r) => groupMatchesCourse(r.groupName, course)) : afterSpec),
+    [afterSpec, course]
   );
   const afterGroup = useMemo(
     () => (groupName ? afterCourse.filter((r) => r.groupName === groupName) : afterCourse),
@@ -93,7 +97,7 @@ export function TeacherPracticeView({
     const q = search.trim().toLowerCase();
     return rows.filter((r) => {
       if (speciality && r.groupSpeciality !== speciality) return false;
-      if (course && String(r.course) !== course) return false;
+      if (course && !groupMatchesCourse(r.groupName, course)) return false;
       if (groupName && r.groupName !== groupName) return false;
       if (semester && String(r.semesterNumber) !== semester) return false;
       if (kind && r.kind !== kind) return false;
@@ -140,8 +144,15 @@ export function TeacherPracticeView({
         <CardContent className="p-4 space-y-3">
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3">
             <Sel label="Специальность" value={speciality} onChange={(v) => { setSpeciality(v); setCourse(""); setGroupName(""); }} options={specialities} />
-            <Sel label="Курс" value={course} onChange={(v) => { setCourse(v); setGroupName(""); }} options={courses} disabled={courses.length === 0} />
-            <Sel label="Группа" value={groupName} onChange={(v) => { setGroupName(v); setStudentId(""); }} options={groups} disabled={groups.length === 0} />
+            <Sel label="Курс" value={course} onChange={(v) => { setCourse(v); setGroupName(""); }} options={courses.map(String)} disabled={courses.length === 0} />
+            <Sel
+              label="Группа"
+              value={groupName}
+              onChange={(v) => { setGroupName(v); setStudentId(""); }}
+              options={groups}
+              disabled={!course || groups.length === 0}
+              emptyLabel={course ? "— все —" : "Сначала курс"}
+            />
             <Sel label="Семестр" value={semester} onChange={setSemester} options={semesters} />
             <Sel
               label="Вид"
@@ -158,12 +169,7 @@ export function TeacherPracticeView({
               optionsLabels={Object.fromEntries(studentOpts.map((s) => [s.id, s.fullName]))}
             />
           </div>
-          <div className="flex items-center justify-between gap-2 text-xs">
-            <span className="text-muted-foreground">
-              {hasFilters
-                ? <>Найдено: <span className="font-medium">{filtered.length}</span></>
-                : <>Показаны последние <span className="font-medium">{visible.length}</span> из {rows.length}</>}
-            </span>
+          <div className="flex items-center justify-end gap-2 text-xs">
             <div className="flex gap-2">
               <Button asChild variant="outline" size="sm">
                 <Link href={reportUrl} target="_blank">
@@ -171,11 +177,10 @@ export function TeacherPracticeView({
                   Отчёт
                 </Link>
               </Button>
-              <PracticeQuickForm
+              <PracticeGroupForm
                 planSlots={planSlots}
-                students={students}
                 institutionName={institutionName}
-                trigger={<Button size="sm"><Plus className="h-3 w-3 mr-1" />Добавить</Button>}
+                trigger={<Button size="sm"><Plus className="h-3 w-3 mr-1" />Добавить группу</Button>}
               />
               {hasFilters && (
                 <Button variant="ghost" size="sm" onClick={() => {
@@ -210,11 +215,13 @@ export function TeacherPracticeView({
               {visible.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={9} className="text-center text-muted-foreground py-8">
-                    {hasFilters ? "По выбранным фильтрам ничего не найдено." : "Практик пока нет."}
+                    {hasFilters
+                      ? "По выбранным фильтрам записей нет. Нажмите «Добавить группу»."
+                      : "Практик пока нет. Нажмите «Добавить группу» — записи создадутся для всех студентов."}
                   </TableCell>
                 </TableRow>
               ) : visible.map((r) => (
-                <Row key={r.id} r={r} planSlots={planSlots} students={students} institutionName={institutionName} />
+                <Row key={r.id} r={r} institutionName={institutionName} />
               ))}
             </TableBody>
           </Table>
@@ -225,9 +232,10 @@ export function TeacherPracticeView({
 }
 
 function Row({
-  r, planSlots, students, institutionName,
-}: { r: PracticeRow; planSlots: PracticePlanSlot[]; students: StudentRef[]; institutionName: string }) {
+  r, institutionName,
+}: { r: PracticeRow; institutionName: string }) {
   const [pending, startTransition] = useTransition();
+  const [ask, ConfirmNode] = useConfirm();
   return (
     <TableRow>
       <TableCell>{r.studentName}</TableCell>
@@ -245,34 +253,28 @@ function Row({
         {r.kind === "EDUCATIONAL" ? <span className="text-muted-foreground">—</span> : (r.orgSupervisorName ?? "—")}
       </TableCell>
       <TableCell className="text-right">
+        {ConfirmNode}
         <div className="flex justify-end gap-1">
-          <PracticeQuickForm
-            planSlots={planSlots}
-            students={students}
-            institutionName={institutionName}
+          <PracticeStudentEditForm
+            studentName={r.studentName}
+            kind={r.kind as "EDUCATIONAL" | "PRODUCTION" | "PREDIPLOMA"}
             initial={{
               id: r.id,
-              semesterId: r.semesterId,
-              groupId: r.groupId,
-              studentId: r.studentId,
-              kind: r.kind as "EDUCATIONAL" | "PRODUCTION" | "PREDIPLOMA",
-              place: r.place,
-              startDate: new Date(r.startDate).toISOString().slice(0, 10),
-              endDate: new Date(r.endDate).toISOString().slice(0, 10),
               grade: r.grade ?? "",
               gradeDate: r.gradeDate ? new Date(r.gradeDate).toISOString().slice(0, 10) : "",
+              place: r.place,
               orgSupervisorName: r.orgSupervisorName ?? "",
               orgSupervisorPosition: r.orgSupervisorPosition ?? "",
             }}
-            trigger={<Button variant="ghost" size="icon" title="Редактировать"><Pencil className="h-4 w-4" /></Button>}
+            trigger={<Button variant="ghost" size="icon" title="Оценка и данные студента"><Pencil className="h-4 w-4" /></Button>}
           />
           <Button
             variant="ghost"
             size="icon"
             disabled={pending}
             title="Удалить"
-            onClick={() => {
-              if (!confirm("Удалить эту практику?")) return;
+            onClick={async () => {
+              if (!(await ask("Удалить эту практику?"))) return;
               startTransition(async () => {
                 try { await deletePractice(r.id); }
                 catch (e) { alert(e instanceof Error ? e.message : "Ошибка"); }
@@ -288,7 +290,7 @@ function Row({
 }
 
 function Sel({
-  label, value, onChange, options, disabled, optionsLabels,
+  label, value, onChange, options, disabled, optionsLabels, emptyLabel = "— все —",
 }: {
   label: string;
   value: string;
@@ -296,6 +298,7 @@ function Sel({
   options: readonly string[];
   disabled?: boolean;
   optionsLabels?: Record<string, string>;
+  emptyLabel?: string;
 }) {
   return (
     <div className="space-y-1">
@@ -306,7 +309,7 @@ function Sel({
         disabled={disabled}
         className="flex h-9 w-full rounded-md border border-input bg-background px-3 text-sm shadow-sm disabled:opacity-50"
       >
-        <option value="">— все —</option>
+        <option value="">{emptyLabel}</option>
         {options.map((o) => <option key={o} value={o}>{optionsLabels?.[o] ?? o}</option>)}
       </select>
     </div>

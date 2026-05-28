@@ -7,14 +7,19 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { AssessmentForm } from "@/components/forms/AssessmentForm";
 import { AssessmentRowActions } from "./AssessmentRowActions";
 import { StudentAttestationExplorer } from "./StudentAttestationExplorer";
 import { evaluateAdmission } from "@/lib/admission";
 import { getTeacherStudentIds, getTeacherDisciplineIds, getTeacherPlan } from "@/lib/teacherPlan";
 import { TeacherPlanList, type PlanCardItem } from "./TeacherPlanList";
 import { assessmentTypeLabel, formatDate, gradeIsPassing } from "@/lib/utils";
-import { CheckCircle2, AlertTriangle, Printer, Plus } from "lucide-react";
+import { CheckCircle2, AlertTriangle, Printer } from "lucide-react";
+import {
+  filterGroupNamesByCourse,
+  filterItemsByGroupCourse,
+  uniqueCoursesFromGroupNames,
+} from "@/lib/group-course";
+import { AutoFilterForm } from "@/components/filters/AutoFilterForm";
 
 export default async function AttestationsPage({
   searchParams,
@@ -33,13 +38,14 @@ export default async function AttestationsPage({
   const params = await searchParams;
 
   if (session.role === "STUDENT") return <StudentView userId={session.userId} />;
-  if (session.role === "TEACHER") return <TeacherView teacherId={session.userId} />;
+  if (session.role === "TEACHER") return <TeacherView teacherId={session.userId} params={params} />;
   return <StaffView session={session} params={params} />;
 }
 
-async function TeacherView({ teacherId }: { teacherId: string }) {
-  const plan = await getTeacherPlan(teacherId);
-  const items: PlanCardItem[] = plan
+function planToCardItems(
+  plan: Awaited<ReturnType<typeof getTeacherPlan>>
+): PlanCardItem[] {
+  return plan
     .filter((p) => p.kind === "ASSESSMENT" && p.discipline && p.group && p.semester)
     .map((p) => ({
       id: p.id,
@@ -50,13 +56,123 @@ async function TeacherView({ teacherId }: { teacherId: string }) {
       semesterNumber: p.semester!.number,
       academicYear: p.semester!.academicYear,
       hours: p.hours,
+      controlForm: (p as any).controlForm ?? null,
     }));
+}
+
+async function TeacherView({
+  teacherId,
+  params,
+}: {
+  teacherId: string;
+  params: { studentId?: string };
+}) {
+  const [plan, allowedStudentIds] = await Promise.all([
+    getTeacherPlan(teacherId),
+    getTeacherStudentIds(teacherId),
+  ]);
+  const items = planToCardItems(plan);
+
+  if (!params.studentId) {
+    return (
+      <div className="space-y-4">
+        <h1 className="text-2xl font-semibold">Дисциплины</h1>
+        <TeacherPlanList items={items} />
+      </div>
+    );
+  }
+
+  if (!allowedStudentIds.includes(params.studentId)) {
+    return (
+      <div className="space-y-4">
+        <h1 className="text-2xl font-semibold">Дисциплины</h1>
+        <Card>
+          <CardContent className="p-8 text-center text-muted-foreground">
+            Студент не найден или недоступен.
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  const student = await prisma.student.findUnique({
+    where: { id: params.studentId },
+    include: { user: true, group: true },
+  });
+  if (!student) {
+    return (
+      <div className="space-y-4">
+        <h1 className="text-2xl font-semibold">Дисциплины</h1>
+        <Card>
+          <CardContent className="p-8 text-center text-muted-foreground">Студент не найден.</CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  const assessments = await prisma.assessment.findMany({
+    where: { studentId: student.id, teacherId },
+    select: { disciplineId: true, semesterId: true },
+  });
+
+  const planIdsWithRecords = new Set<string>();
+  for (const a of assessments) {
+    const match = plan.find(
+      (p) =>
+        p.kind === "ASSESSMENT" &&
+        p.disciplineId === a.disciplineId &&
+        p.semesterId === a.semesterId &&
+        p.groupId === student.groupId
+    );
+    if (match) planIdsWithRecords.add(match.id);
+  }
+
+  const filteredItems = items.filter((it) => planIdsWithRecords.has(it.id));
 
   return (
     <div className="space-y-4">
-      <h1 className="text-2xl font-semibold">Промежуточная аттестация</h1>
-      <TeacherPlanList items={items} />
+      <h1 className="text-2xl font-semibold">Дисциплины</h1>
+      <StudentFilterBanner
+        studentName={student.user.fullName}
+        groupName={student.group.name}
+        recordCount={assessments.length}
+      />
+      <TeacherPlanList
+        items={filteredItems}
+        emptyMessage={
+          assessments.length === 0
+            ? "У этого студента пока нет записей по вашим дисциплинам."
+            : "Нет дисциплин в вашем плане, соответствующих записям студента."
+        }
+      />
     </div>
+  );
+}
+
+function StudentFilterBanner({
+  studentName,
+  groupName,
+  recordCount,
+  resetHref = "/attestations",
+}: {
+  studentName: string;
+  groupName: string;
+  recordCount: number;
+  resetHref?: string;
+}) {
+  return (
+    <Card className="border-primary/30 bg-primary/5">
+      <CardContent className="p-4 flex flex-wrap items-center justify-between gap-3">
+        <div className="text-sm">
+          <span className="text-muted-foreground">Фильтр по студенту: </span>
+          <span className="font-semibold">{studentName}</span>
+          <span className="text-muted-foreground"> · {groupName}</span>
+        </div>
+        <Button asChild variant="outline" size="sm">
+          <Link href={resetHref}>Сбросить фильтр</Link>
+        </Button>
+      </CardContent>
+    </Card>
   );
 }
 
@@ -84,7 +200,6 @@ async function StudentView({ userId }: { userId: string }) {
     id: a.id,
     discipline: { name: a.discipline.name },
     hours: a.hours,
-    creditUnits: a.creditUnits,
     type: a.type,
     grade: a.grade,
     date: a.date.toISOString(),
@@ -102,7 +217,7 @@ async function StudentView({ userId }: { userId: string }) {
       <div className="flex items-end justify-between gap-3 flex-wrap no-print">
         <div>
           <h1 className="text-2xl font-semibold">Зачётная книжка</h1>
-          <p className="text-muted-foreground text-sm">Промежуточная аттестация · {student.user.fullName}</p>
+          <p className="text-muted-foreground text-sm">Дисциплины · {student.user.fullName}</p>
         </div>
         <Button asChild variant="outline">
           <Link href={`/print/attestation/${student.id}`} target="_blank">
@@ -185,7 +300,7 @@ async function StaffView({
   // Каскадные фильтры для студентов
   let filteredStudents = allStudents;
   if (params.speciality) filteredStudents = filteredStudents.filter((s) => s.group.speciality === params.speciality);
-  if (params.course) filteredStudents = filteredStudents.filter((s) => String(s.currentCourse) === params.course);
+  if (params.course) filteredStudents = filterItemsByGroupCourse(filteredStudents, params.course);
   if (params.group) filteredStudents = filteredStudents.filter((s) => s.group.name === params.group);
 
   const studentOpts = allStudents.map((s) => ({ id: s.id, label: `${s.user.fullName} (${s.group.name})` }));
@@ -194,13 +309,13 @@ async function StaffView({
 
   // Уникальные значения для фильтров
   const specialities = Array.from(new Set(allStudents.map((s) => s.group.speciality).filter(Boolean) as string[])).sort();
-  const courses = Array.from(new Set(allStudents.map((s) => s.currentCourse))).sort((a, b) => a - b);
-  const groups = Array.from(new Set(
-    (params.speciality || params.course
-      ? filteredStudents
-      : allStudents
-    ).map((s) => s.group.name)
-  )).sort();
+  const courses = uniqueCoursesFromGroupNames(allStudents.map((s) => s.group.name));
+  const groups = params.course
+    ? filterGroupNamesByCourse(
+        (params.speciality ? filteredStudents : allStudents).map((s) => s.group.name),
+        params.course
+      )
+    : [];
 
   const filteredStudentIds = filteredStudents.map((s) => s.id);
 
@@ -218,6 +333,10 @@ async function StaffView({
   };
 
   const hasFilters = !!(params.studentId || params.speciality || params.course || params.group || params.discipline || params.dateFrom || params.dateTo);
+
+  const filterStudent = params.studentId
+    ? allStudents.find((s) => s.id === params.studentId)
+    : undefined;
 
   const assessments = await prisma.assessment.findMany({
     where,
@@ -244,26 +363,24 @@ async function StaffView({
   return (
     <div className="space-y-6">
       <div className="flex items-end justify-between gap-4 flex-wrap">
-        <h1 className="text-2xl font-semibold">Промежуточная аттестация</h1>
+        <h1 className="text-2xl font-semibold">Дисциплины</h1>
         <div className="flex gap-2">
           <Button asChild variant="outline" size="sm">
             <Link href={`/print/attestation-report?${reportParams.toString()}`} target="_blank">
               <Printer className="h-4 w-4 mr-2" />Отчёт
             </Link>
           </Button>
-          {can(session, "assessment:create") && (
-            <AssessmentForm
-              students={studentOpts}
-              semesters={[]}
-              disciplines={disciplineOpts}
-              teachers={teacherOpts}
-              lockTeacher={session.role === "TEACHER"}
-              initial={{ studentId: params.studentId ?? undefined, teacherId: session.userId }}
-              trigger={<Button><Plus className="h-4 w-4 mr-2" />Добавить</Button>}
-            />
-          )}
         </div>
       </div>
+
+      {filterStudent && (
+        <StudentFilterBanner
+          studentName={filterStudent.user.fullName}
+          groupName={filterStudent.group.name}
+          recordCount={assessments.length}
+          resetHref="/attestations"
+        />
+      )}
 
       {/* Фильтры */}
       <Card>
@@ -271,10 +388,17 @@ async function StaffView({
           <CardTitle className="text-base">Фильтры</CardTitle>
         </CardHeader>
         <CardContent>
-          <form className="grid sm:grid-cols-3 gap-3" action="/attestations" method="get">
+          <AutoFilterForm action="/attestations" className="grid sm:grid-cols-3 gap-3">
             <FilterSelect name="speciality" label="Специальность" value={params.speciality ?? ""} options={specialities} />
             <FilterSelect name="course" label="Курс" value={params.course ?? ""} options={courses.map(String)} />
-            <FilterSelect name="group" label="Группа" value={params.group ?? ""} options={groups} />
+            <FilterSelect
+              name="group"
+              label="Группа"
+              value={params.group ?? ""}
+              options={groups}
+              disabled={!params.course}
+              emptyLabel={params.course ? "— все —" : "Сначала выберите курс"}
+            />
             <FilterSelect name="studentId" label="Студент" value={params.studentId ?? ""}
               options={filteredStudents.map((s) => ({ value: s.id, label: `${s.user.fullName} (${s.group.name})` }))}
               emptyLabel="— все —" />
@@ -291,17 +415,13 @@ async function StaffView({
                 className="flex h-9 w-full rounded-md border border-input bg-background px-3 text-sm shadow-sm" />
             </div>
             <div className="flex gap-2 items-end sm:col-span-3">
-              <Button type="submit" variant="outline" size="sm">Применить</Button>
               {hasFilters && (
                 <Button type="button" variant="ghost" size="sm" asChild>
                   <Link href="/attestations">Сбросить</Link>
                 </Button>
               )}
-              <span className="text-xs text-muted-foreground self-center ml-2">
-                {hasFilters ? `Найдено: ${assessments.length}` : `Последние 10 из всех`}
-              </span>
             </div>
-          </form>
+          </AutoFilterForm>
         </CardContent>
       </Card>
 
@@ -379,13 +499,14 @@ async function StaffView({
 }
 
 function FilterSelect({
-  name, label, value, options, emptyLabel = "— все —",
+  name, label, value, options, emptyLabel = "— все —", disabled,
 }: {
   name: string;
   label: string;
   value: string;
   options: string[] | { value: string; label: string }[];
   emptyLabel?: string;
+  disabled?: boolean;
 }) {
   const normalized = options.map((o) =>
     typeof o === "string" ? { value: o, label: o } : o
@@ -396,7 +517,8 @@ function FilterSelect({
       <select
         name={name}
         defaultValue={value}
-        className="flex h-9 w-full rounded-md border border-input bg-background px-3 text-sm shadow-sm"
+        disabled={disabled}
+        className="flex h-9 w-full rounded-md border border-input bg-background px-3 text-sm shadow-sm disabled:opacity-50"
       >
         <option value="">{emptyLabel}</option>
         {normalized.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}

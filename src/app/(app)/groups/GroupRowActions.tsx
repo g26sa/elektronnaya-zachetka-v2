@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { GroupForm } from "./GroupForm";
 import { deleteGroup } from "./actions";
 import { Pencil, Trash2 } from "lucide-react";
+import { useConfirm } from "@/components/ui/confirm-dialog";
 
 export function GroupRowActions({
   id,
@@ -17,8 +18,11 @@ export function GroupRowActions({
   studentCount: number;
 }) {
   const [pending, startTransition] = useTransition();
+  const [ask, ConfirmNode] = useConfirm();
+
   return (
     <div className="flex justify-end gap-1">
+      {ConfirmNode}
       <GroupForm
         id={id}
         initial={initial}
@@ -30,8 +34,8 @@ export function GroupRowActions({
         size="icon"
         disabled={pending || studentCount > 0}
         title={studentCount > 0 ? `Сначала переведите ${studentCount} студентов в другую группу` : "Удалить"}
-        onClick={() => {
-          if (!confirm("Удалить эту группу?")) return;
+        onClick={async () => {
+          if (!(await ask("Удалить эту группу?"))) return;
           startTransition(async () => {
             try { await deleteGroup(id); }
             catch (e) { alert(e instanceof Error ? e.message : "Ошибка"); }

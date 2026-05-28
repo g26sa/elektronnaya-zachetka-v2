@@ -5,21 +5,63 @@ import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { PlanItemForm } from "./PlanItemForm";
 import { PlanRowActions } from "./PlanRowActions";
-import type { TeachingKind } from "@/types/enums";
+import type { PlanTeachingKind, TeachingKind } from "@/types/enums";
+import {
+  courseFromGroupName,
+  filterGroupNamesByCourse,
+  groupMatchesCourse,
+  uniqueCoursesFromGroupNames,
+} from "@/lib/group-course";
 import { Plus, Printer } from "lucide-react";
 import Link from "next/link";
+import { AutoFilterForm } from "@/components/filters/AutoFilterForm";
 
 const TABS = [
-  { key: "ASSESSMENT", label: "Промежуточная аттестация" },
+  { key: "ASSESSMENT", label: "Дисциплины" },
   { key: "COURSEWORK",  label: "Курсовые работы" },
   { key: "PRACTICE",   label: "Практики" },
   { key: "VKR",        label: "Руководство ВКР" },
 ] as const;
 
+type PlanSearchParams = {
+  tab?: string;
+  teacher?: string;
+  course?: string;
+  group?: string;
+  discipline?: string;
+  student?: string;
+};
+
+function planHref(tab: string, params: PlanSearchParams) {
+  const sp = new URLSearchParams();
+  sp.set("tab", tab);
+  if (params.teacher) sp.set("teacher", params.teacher);
+  if (params.course) sp.set("course", params.course);
+  if (params.group) sp.set("group", params.group);
+  if ((tab === "ASSESSMENT" || tab === "COURSEWORK") && params.discipline) {
+    sp.set("discipline", params.discipline);
+  }
+  if (tab === "VKR" && params.student) sp.set("student", params.student);
+  return `/plan?${sp.toString()}`;
+}
+
+function planReportHref(tab: string, params: PlanSearchParams) {
+  const sp = new URLSearchParams();
+  sp.set("kind", tab);
+  if (params.teacher) sp.set("teacher", params.teacher);
+  if (params.course) sp.set("course", params.course);
+  if (params.group) sp.set("group", params.group);
+  if ((tab === "ASSESSMENT" || tab === "COURSEWORK") && params.discipline) {
+    sp.set("discipline", params.discipline);
+  }
+  if (tab === "VKR" && params.student) sp.set("student", params.student);
+  return `/print/teacher-plan?${sp.toString()}`;
+}
+
 export default async function PlanPage({
   searchParams,
 }: {
-  searchParams: Promise<{ tab?: string; teacher?: string; course?: string; group?: string; discipline?: string }>;
+  searchParams: Promise<PlanSearchParams>;
 }) {
   await requireRole("HEAD");
   const params = await searchParams;
@@ -49,25 +91,81 @@ export default async function PlanPage({
   ]);
 
   const oT = teachers.map((t) => ({ id: t.id, label: t.fullName }));
-  const oSem = semesters.map((s) => ({ id: s.id, label: `${s.course} курс, ${s.number} семестр (${s.academicYear})` }));
+  const oSem = semesters.map((s) => ({ id: s.id, course: s.course, number: s.number }));
   const oD = disciplines.map((d) => ({ id: d.id, label: d.name }));
-  const oG = groups.map((g) => ({ id: g.id, label: g.name }));
-  const oS = students.map((s) => ({ id: s.id, label: `${s.user.fullName} (${s.group.name})` }));
+  const oG = groups.map((g) => ({ id: g.id, name: g.name, speciality: g.speciality ?? "" }));
+  const oS = students.map((s) => ({
+    id: s.id,
+    label: `${s.user.fullName} (${s.group.name})`,
+    groupId: s.groupId,
+  }));
 
-  // Применяем фильтры
   let filtered = items;
-  if (params.teacher) filtered = filtered.filter((i) => i.teacher.fullName.toLowerCase().includes(params.teacher!.toLowerCase()));
-  if (params.course) filtered = filtered.filter((i) => i.semester && String(i.semester.course) === params.course);
-  if (params.group) filtered = filtered.filter((i) => i.group?.name === params.group);
-  if (params.discipline) filtered = filtered.filter((i) => i.discipline?.name === params.discipline);
+  if (params.teacher) filtered = filtered.filter((i) => i.teacherId === params.teacher);
+  if (params.course) {
+    filtered = filtered.filter((i) => {
+      const gName = i.group?.name ?? i.student?.group.name;
+      return gName ? groupMatchesCourse(gName, params.course!) : false;
+    });
+  }
+  if (params.group) {
+    filtered = filtered.filter((i) => (i.group?.name ?? i.student?.group.name) === params.group);
+  }
+  if (params.discipline && (activeTab === "ASSESSMENT" || activeTab === "COURSEWORK")) {
+    filtered = filtered.filter((i) => i.discipline?.name === params.discipline);
+  }
+  if (params.student && activeTab === "VKR") {
+    filtered = filtered.filter((i) => i.studentId === params.student);
+  }
 
-  const uniqueGroups = Array.from(new Set(items.map((i) => i.group?.name).filter(Boolean) as string[])).sort();
-  const uniqueDisciplines = Array.from(new Set(items.map((i) => i.discipline?.name).filter(Boolean) as string[])).sort();
-  const courses = Array.from(new Set(items.map((i) => i.semester?.course).filter(Boolean) as number[])).sort();
+  const teacherOptions = Array.from(
+    new Map(items.map((i) => [i.teacher.id, i.teacher.fullName] as const)).entries()
+  )
+    .map(([id, name]) => ({ id, name }))
+    .sort((a, b) => a.name.localeCompare(b.name, "ru"));
+
+  const uniqueDisciplines = Array.from(
+    new Set(
+      items
+        .filter((i) => i.discipline?.name)
+        .map((i) => i.discipline!.name)
+    )
+  ).sort((a, b) => a.localeCompare(b, "ru"));
+  const allGroupNames = items
+    .map((i) => i.group?.name ?? i.student?.group.name)
+    .filter(Boolean) as string[];
+  const courses = uniqueCoursesFromGroupNames(allGroupNames);
+  const filterGroupOptions = params.course
+    ? filterGroupNamesByCourse(allGroupNames, params.course).map((name) => ({ value: name, label: name }))
+    : [];
+
+  const studentOptions = Array.from(
+    new Map(
+      items
+        .filter((i) => i.student)
+        .map((i) => [i.student!.id, `${i.student!.user.fullName} (${i.student!.group.name})`] as const)
+    ).entries()
+  )
+    .map(([id, label]) => ({ id, label }))
+    .sort((a, b) => a.label.localeCompare(b.label, "ru"));
 
   const isVkr = activeTab === "VKR";
-  const hasDiscipLine = activeTab === "ASSESSMENT" || activeTab === "COURSEWORK";
-  const hasPractice = activeTab === "PRACTICE";
+  const hasDisciplineFilter = activeTab === "ASSESSMENT" || activeTab === "COURSEWORK";
+  const hasDiscipLine = hasDisciplineFilter;
+  const hasFilters = !!(
+    params.teacher ||
+    params.course ||
+    params.group ||
+    (hasDisciplineFilter && params.discipline) ||
+    (isVkr && params.student)
+  );
+
+  const colCount =
+    2 +
+    (isVkr ? 3 : 2) +
+    (hasDiscipLine ? 1 : 0) +
+    (activeTab === "ASSESSMENT" ? 1 : 0) +
+    1;
 
   return (
     <div className="space-y-4">
@@ -75,7 +173,7 @@ export default async function PlanPage({
         <h1 className="text-2xl font-semibold">Планы преподавателей</h1>
         <div className="flex gap-2">
           <Button asChild variant="outline" size="sm">
-            <Link href={`/print/teacher-plan?kind=${activeTab}`} target="_blank">
+            <Link href={planReportHref(activeTab, params)} target="_blank">
               <Printer className="h-4 w-4 mr-2" />Отчёт
             </Link>
           </Button>
@@ -85,7 +183,8 @@ export default async function PlanPage({
             disciplines={oD}
             groups={oG}
             students={oS}
-            defaultKind={activeTab}
+            defaultKind={activeTab as PlanTeachingKind}
+            isHead={true}
             trigger={<Button><Plus className="h-4 w-4 mr-2" />Назначить</Button>}
           />
         </div>
@@ -96,7 +195,7 @@ export default async function PlanPage({
         {TABS.map((tab) => (
           <Link
             key={tab.key}
-            href={`/plan?tab=${tab.key}`}
+            href={planHref(tab.key, params)}
             className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
               activeTab === tab.key
                 ? "border-primary text-primary"
@@ -109,42 +208,60 @@ export default async function PlanPage({
       </div>
 
       {/* Фильтры */}
-      <form action="/plan" method="get" className="flex flex-wrap gap-4 items-end">
-        <input type="hidden" name="tab" value={activeTab} />
-        {courses.length > 0 && (
-          <div className="space-y-1">
-            <label className="text-xs uppercase tracking-wide text-muted-foreground block">Курс</label>
-            <select name="course" defaultValue={params.course ?? ""} className="flex h-9 rounded-md border border-input bg-background px-3 text-sm shadow-sm">
-              <option value="">— все —</option>
-              {courses.map((c) => <option key={c} value={c}>{c}</option>)}
-            </select>
-          </div>
-        )}
-        {uniqueGroups.length > 0 && (
-          <div className="space-y-1">
-            <label className="text-xs uppercase tracking-wide text-muted-foreground block">Группа</label>
-            <select name="group" defaultValue={params.group ?? ""} className="flex h-9 rounded-md border border-input bg-background px-3 text-sm shadow-sm">
-              <option value="">— все —</option>
-              {uniqueGroups.map((g) => <option key={g} value={g}>{g}</option>)}
-            </select>
-          </div>
-        )}
-        {uniqueDisciplines.length > 0 && (
-          <div className="space-y-1">
-            <label className="text-xs uppercase tracking-wide text-muted-foreground block">Дисциплина</label>
-            <select name="discipline" defaultValue={params.discipline ?? ""} className="flex h-9 rounded-md border border-input bg-background px-3 text-sm shadow-sm min-w-[180px]">
-              <option value="">— все —</option>
-              {uniqueDisciplines.map((d) => <option key={d} value={d}>{d}</option>)}
-            </select>
-          </div>
-        )}
-        <Button type="submit" variant="outline" size="sm">Применить</Button>
-        {(params.course || params.group || params.discipline) && (
-          <Button type="button" variant="ghost" size="sm" onClick={undefined} asChild>
-            <Link href={`/plan?tab=${activeTab}`}>Сбросить</Link>
-          </Button>
-        )}
-      </form>
+      <Card>
+        <CardContent className="p-4">
+          <AutoFilterForm action="/plan" className="flex flex-wrap gap-3 items-end" hidden={{ tab: activeTab }}>
+            {teacherOptions.length > 0 && (
+              <FilterSelect
+                name="teacher"
+                label="Преподаватель"
+                value={params.teacher ?? ""}
+                options={teacherOptions.map((t) => ({ value: t.id, label: t.name }))}
+                minWidth
+              />
+            )}
+            {courses.length > 0 && (
+              <FilterSelect
+                name="course"
+                label="Курс"
+                value={params.course ?? ""}
+                options={courses.map((c) => ({ value: String(c), label: String(c) }))}
+              />
+            )}
+            <FilterSelect
+              name="group"
+              label="Группа"
+              value={params.group ?? ""}
+              options={filterGroupOptions}
+              disabled={!params.course}
+              emptyLabel={params.course ? "— все —" : "Сначала выберите курс"}
+            />
+            {hasDisciplineFilter && uniqueDisciplines.length > 0 && (
+              <FilterSelect
+                name="discipline"
+                label="Дисциплина"
+                value={params.discipline ?? ""}
+                options={uniqueDisciplines.map((d) => ({ value: d, label: d }))}
+                minWidth
+              />
+            )}
+            {isVkr && studentOptions.length > 0 && (
+              <FilterSelect
+                name="student"
+                label="Студент"
+                value={params.student ?? ""}
+                options={studentOptions.map((s) => ({ value: s.id, label: s.label }))}
+                minWidth
+              />
+            )}
+            {hasFilters && (
+              <Button type="button" variant="ghost" size="sm" asChild>
+                <Link href={`/plan?tab=${activeTab}`}>Сбросить</Link>
+              </Button>
+            )}
+          </AutoFilterForm>
+        </CardContent>
+      </Card>
 
       <Card>
         <CardContent className="p-0">
@@ -152,10 +269,19 @@ export default async function PlanPage({
             <TableHeader>
               <TableRow>
                 <TableHead>Преподаватель</TableHead>
-                <TableHead>Курс / Сем.</TableHead>
-                {!isVkr && <TableHead>Группа</TableHead>}
+                {isVkr ? (
+                  <>
+                    <TableHead>Курс</TableHead>
+                    <TableHead>Группа</TableHead>
+                    <TableHead>Студент</TableHead>
+                  </>
+                ) : (
+                  <>
+                    <TableHead>Курс / Сем.</TableHead>
+                    <TableHead>Группа</TableHead>
+                  </>
+                )}
                 {hasDiscipLine && <TableHead>Дисциплина</TableHead>}
-                {isVkr && <TableHead>Студент</TableHead>}
                 {activeTab === "ASSESSMENT" && <TableHead>Часы</TableHead>}
                 <TableHead className="text-right">Действия</TableHead>
               </TableRow>
@@ -163,21 +289,34 @@ export default async function PlanPage({
             <TableBody>
               {filtered.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={7} className="text-center text-muted-foreground py-10">
+                  <TableCell colSpan={colCount} className="text-center text-muted-foreground py-10">
                     Нет записей. Нажмите «Назначить» чтобы добавить.
                   </TableCell>
                 </TableRow>
               ) : filtered.map((it) => {
+                const groupName = it.group?.name ?? it.student?.group.name;
+                const courseFromGroup = groupName ? courseFromGroupName(groupName) : null;
                 const semLabel = it.semester
-                  ? `${it.semester.course}к, ${it.semester.number} сем.`
-                  : null;
+                  ? `${courseFromGroup ?? it.semester.course}к, ${it.semester.number} сем.`
+                  : courseFromGroup
+                    ? `${courseFromGroup}к`
+                    : null;
                 return (
                   <TableRow key={it.id}>
                     <TableCell>{it.teacher.fullName}</TableCell>
-                    <TableCell>{semLabel}</TableCell>
-                    {!isVkr && <TableCell>{it.group?.name}</TableCell>}
+                    {isVkr ? (
+                      <>
+                        <TableCell>{courseFromGroup ? `${courseFromGroup}` : "—"}</TableCell>
+                        <TableCell>{groupName ?? "—"}</TableCell>
+                        <TableCell>{it.student?.user.fullName ?? "—"}</TableCell>
+                      </>
+                    ) : (
+                      <>
+                        <TableCell>{semLabel}</TableCell>
+                        <TableCell>{it.group?.name}</TableCell>
+                      </>
+                    )}
                     {hasDiscipLine && <TableCell>{it.discipline?.name}</TableCell>}
-                    {isVkr && <TableCell>{it.student?.user.fullName}</TableCell>}
                     {activeTab === "ASSESSMENT" && <TableCell>{it.hours}</TableCell>}
                     <TableCell className="text-right">
                       <PlanRowActions
@@ -185,18 +324,19 @@ export default async function PlanPage({
                         initial={{
                           teacherId: it.teacherId,
                           kind: it.kind as TeachingKind,
+                          controlForm: (it as any).controlForm ?? undefined,
                           semesterId: it.semesterId,
                           disciplineId: it.disciplineId,
-                          groupId: it.groupId,
+                          groupId: it.groupId ?? it.student?.groupId ?? undefined,
                           studentId: it.studentId,
                           hours: it.hours,
-                          notes: it.notes,
-                        }}
+                        } as any}
                         teachers={oT}
                         semesters={oSem}
                         disciplines={oD}
                         groups={oG}
                         students={oS}
+                        isHead={true}
                       />
                     </TableCell>
                   </TableRow>
@@ -206,6 +346,46 @@ export default async function PlanPage({
           </Table>
         </CardContent>
       </Card>
+    </div>
+  );
+}
+
+function FilterSelect({
+  name,
+  label,
+  value,
+  options,
+  minWidth,
+  disabled,
+  emptyLabel = "— все —",
+}: {
+  name: string;
+  label: string;
+  value: string;
+  options: { value: string; label: string }[];
+  minWidth?: boolean;
+  disabled?: boolean;
+  emptyLabel?: string;
+}) {
+  return (
+    <div className="space-y-1">
+      <label className="text-xs uppercase tracking-wide text-muted-foreground block">{label}</label>
+      <select
+        name={name}
+        defaultValue={value}
+        disabled={disabled}
+        className={
+          "flex h-9 rounded-md border border-input bg-background px-3 text-sm shadow-sm disabled:opacity-50" +
+          (minWidth ? " min-w-[180px]" : "")
+        }
+      >
+        <option value="">{emptyLabel}</option>
+        {options.map((o) => (
+          <option key={o.value} value={o.value}>
+            {o.label}
+          </option>
+        ))}
+      </select>
     </div>
   );
 }

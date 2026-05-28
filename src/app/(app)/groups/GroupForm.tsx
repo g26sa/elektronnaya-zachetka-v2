@@ -52,22 +52,13 @@ export function GroupForm({
         <DialogHeader><DialogTitle>{id ? "Редактировать группу" : "Новая группа"}</DialogTitle></DialogHeader>
         <form onSubmit={submit} className="grid sm:grid-cols-2 gap-4">
           <F label="Название" err={errors.name?.message}>
-            <Input placeholder="например, ИС-21" {...register("name")} />
+            <Input {...register("name")} />
           </F>
           <F label="Год набора" err={errors.startYear?.message}>
             <Input type="number" min={1990} max={2100} {...register("startYear")} />
           </F>
           <F label="Специальность / направление" err={errors.speciality?.message} className="sm:col-span-2">
-            <Input
-              list="speciality-suggestions"
-              placeholder="09.02.07 Информационные системы и программирование"
-              {...register("speciality")}
-            />
-            {specialities && specialities.length > 0 && (
-              <datalist id="speciality-suggestions">
-                {specialities.map((s) => <option key={s} value={s} />)}
-              </datalist>
-            )}
+            <Input {...register("speciality")} />
           </F>
 
           {err && <p className="sm:col-span-2 text-sm text-destructive">{err}</p>}

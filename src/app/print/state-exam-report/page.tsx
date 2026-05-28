@@ -1,8 +1,9 @@
 import { requireRole } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { PrintBar } from "@/components/documents/PrintBar";
-import { DocumentHeader, DocumentSignatures } from "@/components/documents/DocumentHeader";
+import { DocumentHeader, TeacherReportFooter } from "@/components/documents/DocumentHeader";
 import { admissionLabel, formatDate } from "@/lib/utils";
+import { groupMatchesCourse } from "@/lib/group-course";
 
 export default async function StateExamReportPage({
   searchParams,
@@ -31,18 +32,19 @@ export default async function StateExamReportPage({
     where = { studentId: { in: all.length > 0 ? all : ["__none__"] } };
   }
 
-  const items = await prisma.stateExam.findMany({
+  const items = await (prisma.stateExam.findMany as Function)({
     where,
     include: {
       student: { include: { user: true, group: true } },
       chair: true,
+      chairGek: true,
     },
     orderBy: { date: "desc" },
   });
 
   const rows = items.filter((e) => {
     if (sp.speciality && (e.student.group.speciality ?? "") !== sp.speciality) return false;
-    if (sp.course && String(e.student.currentCourse) !== sp.course) return false;
+    if (sp.course && !groupMatchesCourse(e.student.group.name, sp.course)) return false;
     if (sp.group && e.student.group.name !== sp.group) return false;
     if (sp.studentId && e.studentId !== sp.studentId) return false;
     return true;
@@ -50,13 +52,13 @@ export default async function StateExamReportPage({
 
   return (
     <>
-      <PrintBar />
-      <div className="document p-[24mm]">
+      <PrintBar filename="Государственный экзамен" />
+      <div className="document p-[15mm_20mm]">
         <DocumentHeader
           institution={institution}
           title="Отчёт по государственному экзамену"
-          subtitle={session.fullName}
           generatedAt={new Date()}
+          showDateInHeader={false}
         />
 
         {rows.length === 0 ? (
@@ -65,14 +67,14 @@ export default async function StateExamReportPage({
           <table>
             <thead>
               <tr>
-                <th>№</th>
-                <th>Студент</th>
-                <th>Группа</th>
-                <th>Экзамен</th>
-                <th>Допуск</th>
-                <th>Дата</th>
-                <th>Оценка</th>
-                <th>Председатель ГЭК</th>
+                <th style={{ width: "4%" }}>№</th>
+                <th style={{ width: "18%" }}>Студент</th>
+                <th style={{ width: "8%" }}>Группа</th>
+                <th style={{ width: "20%" }}>Экзамен</th>
+                <th style={{ width: "10%" }}>Допуск</th>
+                <th style={{ width: "10%" }}>Дата</th>
+                <th style={{ width: "10%" }}>Оценка</th>
+                <th style={{ width: "20%" }}>Председатель ГЭК</th>
               </tr>
             </thead>
             <tbody>
@@ -85,16 +87,17 @@ export default async function StateExamReportPage({
                   <td className="text-center">{admissionLabel(e.admission)}</td>
                   <td className="text-center">{formatDate(e.date)}</td>
                   <td className="text-center"><b>{e.grade ?? "—"}</b></td>
-                  <td>{e.chair?.fullName ?? "—"}</td>
+                  <td>{(e as any).chairGek?.fullName ?? e.chair?.fullName ?? "—"}</td>
                 </tr>
               ))}
             </tbody>
           </table>
         )}
-        <p className="text-[11px] mt-3">Всего: {rows.length}.</p>
-        <DocumentSignatures
-          left={{ title: session.role === "HEAD" ? "Заведующий отделением" : "Преподаватель", name: session.fullName }}
-          right={{ title: "Дата" }}
+        <TeacherReportFooter
+          teacherName={session.fullName}
+          institution={institution}
+          date={new Date()}
+          showTeacherSignature={session.role !== "HEAD"}
         />
       </div>
     </>

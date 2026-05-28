@@ -10,6 +10,7 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogT
 import { courseWorkSchema, type CourseWorkInput } from "@/schemas/coursework";
 import { createCourseWork, updateCourseWork } from "@/app/(app)/coursework/actions";
 import { GradeSelect } from "./GradeSelect";
+import { controlledSelectProps } from "./controlled-select";
 
 type Opt = { id: string; label: string };
 
@@ -102,7 +103,7 @@ function Sel({ label, options, err, ...rest }: { label: string; options: Opt[]; 
   return (
     <div className="space-y-1.5">
       <Label>{label}</Label>
-      <select {...rest} className="flex h-9 w-full rounded-md border border-input bg-background px-3 text-sm shadow-sm">
+      <select {...controlledSelectProps(rest)} className="flex h-9 w-full rounded-md border border-input bg-background px-3 text-sm shadow-sm">
         <option value="">— не выбрано —</option>
         {options.map(o => <option key={o.id} value={o.id}>{o.label}</option>)}
       </select>

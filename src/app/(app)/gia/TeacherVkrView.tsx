@@ -13,10 +13,13 @@ import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { saveVkrQuick } from "./actions-quick";
-import { formatDate } from "@/lib/utils";
+import { admissionLabel, formatDate } from "@/lib/utils";
+import { useRouter } from "next/navigation";
 import { useWatch } from "react-hook-form";
+import { bindSelect } from "@/lib/rhf-select";
 import { Plus, X, Printer, Pencil, Search } from "lucide-react";
 import type { TeacherListFilters } from "@/lib/teacher-plan-display";
+import { filterGroupNamesByCourse, groupMatchesCourse, uniqueCoursesFromGroupNames } from "@/lib/group-course";
 
 export type VkrRow = {
   id: string | null;       // null если ВКР ещё не создана для этого студента
@@ -30,6 +33,8 @@ export type VkrRow = {
   type: string | null;
   approvedOrder: string | null;
   approvedDate: Date | string | null;
+  admission: "ADMITTED" | "NOT_ADMITTED" | null;
+  admissionDate: Date | string | null;
 };
 
 export function TeacherVkrView({
@@ -52,9 +57,18 @@ export function TeacherVkrView({
     [rows]
   );
   const afterSpec = useMemo(() => speciality ? rows.filter((r) => r.groupSpeciality === speciality) : rows, [rows, speciality]);
-  const courses = useMemo(() => Array.from(new Set(afterSpec.map((r) => String(r.course)))).sort(), [afterSpec]);
-  const afterCourse = useMemo(() => course ? afterSpec.filter((r) => String(r.course) === course) : afterSpec, [afterSpec, course]);
-  const groups = useMemo(() => Array.from(new Set(afterCourse.map((r) => r.groupName))).sort(), [afterCourse]);
+  const courses = useMemo(
+    () => uniqueCoursesFromGroupNames(afterSpec.map((r) => r.groupName)),
+    [afterSpec]
+  );
+  const groups = useMemo(
+    () => filterGroupNamesByCourse(afterSpec.map((r) => r.groupName), course),
+    [afterSpec, course]
+  );
+  const afterCourse = useMemo(
+    () => (course ? afterSpec.filter((r) => groupMatchesCourse(r.groupName, course)) : afterSpec),
+    [afterSpec, course]
+  );
   const afterGroup = useMemo(() => groupName ? afterCourse.filter((r) => r.groupName === groupName) : afterCourse, [afterCourse, groupName]);
   const studentOpts = useMemo(() => afterGroup.map((r) => ({ id: r.studentId, label: r.studentName })), [afterGroup]);
 
@@ -62,7 +76,7 @@ export function TeacherVkrView({
     const q = search.trim().toLowerCase();
     return rows.filter((r) => {
       if (speciality && r.groupSpeciality !== speciality) return false;
-      if (course && String(r.course) !== course) return false;
+      if (course && !groupMatchesCourse(r.groupName, course)) return false;
       if (groupName && r.groupName !== groupName) return false;
       if (studentId && r.studentId !== studentId) return false;
       if (q) {
@@ -96,8 +110,15 @@ export function TeacherVkrView({
         <CardContent className="p-4 space-y-3">
           <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
             <Sel label="Специальность" value={speciality} onChange={(v) => { setSpeciality(v); setCourse(""); setGroupName(""); }} options={specialities} />
-            <Sel label="Курс" value={course} onChange={(v) => { setCourse(v); setGroupName(""); }} options={courses} disabled={courses.length === 0} />
-            <Sel label="Группа" value={groupName} onChange={(v) => { setGroupName(v); setStudentId(""); }} options={groups} disabled={groups.length === 0} />
+            <Sel label="Курс" value={course} onChange={(v) => { setCourse(v); setGroupName(""); }} options={courses.map(String)} disabled={courses.length === 0} />
+            <Sel
+              label="Группа"
+              value={groupName}
+              onChange={(v) => { setGroupName(v); setStudentId(""); }}
+              options={groups}
+              disabled={!course || groups.length === 0}
+              emptyLabel={course ? "— все —" : "Сначала курс"}
+            />
             <Sel
               label="Студент"
               value={studentId}
@@ -106,12 +127,7 @@ export function TeacherVkrView({
               optionsLabels={Object.fromEntries(studentOpts.map((s) => [s.id, s.label]))}
             />
           </div>
-          <div className="flex items-center justify-between gap-2 text-xs">
-            <span className="text-muted-foreground">
-              {hasFilters
-                ? <>Найдено: <span className="font-medium">{filtered.length}</span></>
-                : <>Показаны первые <span className="font-medium">{visible.length}</span> из {rows.length}</>}
-            </span>
+          <div className="flex items-center justify-end gap-2 text-xs">
             <div className="flex gap-2">
               <Button asChild variant="outline" size="sm">
                 <Link href={reportUrl} target="_blank"><Printer className="h-3 w-3 mr-1" />Отчёт</Link>
@@ -141,14 +157,17 @@ export function TeacherVkrView({
                 <TableHead>Курс</TableHead>
                 <TableHead>Тема</TableHead>
                 <TableHead>Вид</TableHead>
+                <TableHead>Допуск к защите</TableHead>
                 <TableHead>Приказ</TableHead>
                 <TableHead className="text-right">Действия</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {visible.length === 0 ? (
-                <TableRow><TableCell colSpan={7} className="text-center text-muted-foreground py-8">
-                  {hasFilters ? "По выбранным фильтрам ничего не найдено." : "Студентов в плане ВКР пока нет."}
+                <TableRow><TableCell colSpan={8} className="text-center text-muted-foreground py-8">
+                  {hasFilters
+                    ? "По выбранным фильтрам записей нет."
+                    : "ВКР пока нет. Нажмите «Добавить ВКР» чтобы создать запись."}
                 </TableCell></TableRow>
               ) : visible.map((r) => (
                 <TableRow key={r.studentId}>
@@ -159,6 +178,20 @@ export function TeacherVkrView({
                     {r.topic ? <span title={r.topic}>{r.topic}</span> : <Badge variant="outline">тема не выдана</Badge>}
                   </TableCell>
                   <TableCell>{r.type ?? "—"}</TableCell>
+                  <TableCell>
+                    {r.admission ? (
+                      <Badge variant={r.admission === "ADMITTED" ? "success" : "destructive"}>
+                        {admissionLabel(r.admission)}
+                      </Badge>
+                    ) : (
+                      <Badge variant="outline">не указан</Badge>
+                    )}
+                    {r.admission === "ADMITTED" && r.admissionDate && (
+                      <div className="text-xs text-muted-foreground mt-0.5">
+                        {formatDate(r.admissionDate)}
+                      </div>
+                    )}
+                  </TableCell>
                   <TableCell className="whitespace-nowrap text-xs">
                     {r.approvedOrder ? <>{r.approvedOrder}<br/>{formatDate(r.approvedDate)}</> : "—"}
                   </TableCell>
@@ -172,6 +205,7 @@ export function TeacherVkrView({
                         type: r.type ?? "",
                         approvedOrder: r.approvedOrder ?? "",
                         approvedDate: r.approvedDate ? new Date(r.approvedDate).toISOString().slice(0, 10) : "",
+                        admission: r.admission ?? "",
                       }}
                       trigger={
                         r.id
@@ -198,6 +232,7 @@ const formSchema = z.object({
   type: z.string().optional(),
   approvedOrder: z.string().optional(),
   approvedDate: z.string().optional(),
+  admission: z.enum(["", "ADMITTED", "NOT_ADMITTED"]).optional(),
 });
 type FormInput = z.infer<typeof formSchema>;
 
@@ -205,30 +240,50 @@ function VkrForm({
   trigger, initial, vkrTypes,
 }: {
   trigger: React.ReactNode;
-  initial: { studentId: string; studentName: string; topic: string; type: string; approvedOrder: string; approvedDate: string };
+  initial: {
+    studentId: string;
+    studentName: string;
+    topic: string;
+    type: string;
+    approvedOrder: string;
+    approvedDate: string;
+    admission: "" | "ADMITTED" | "NOT_ADMITTED";
+  };
   vkrTypes: { id: string; name: string }[];
 }) {
+  const router = useRouter();
   const [open, setOpen] = useState(false);
   const [pending, startTransition] = useTransition();
   const [err, setErr] = useState<string | null>(null);
 
-  const { register, handleSubmit, formState: { errors } } = useForm<FormInput>({
+  const { register, handleSubmit, control, formState: { errors } } = useForm<FormInput>({
     resolver: zodResolver(formSchema),
     defaultValues: {
       studentId: initial.studentId,
-      topic: initial.topic,
-      type: initial.type,
-      approvedOrder: initial.approvedOrder,
-      approvedDate: initial.approvedDate,
+      topic: initial.topic ?? "",
+      type: initial.type ?? "",
+      approvedOrder: initial.approvedOrder ?? "",
+      approvedDate: initial.approvedDate ?? "",
+      admission: initial.admission ?? "",
     },
   });
+
+  const typeVal = useWatch({ control, name: "type" }) ?? "";
+  const admissionVal = useWatch({ control, name: "admission" }) ?? "";
 
   const submit = handleSubmit((values) => {
     setErr(null);
     startTransition(async () => {
       try {
-        await saveVkrQuick(values);
+        await saveVkrQuick({
+          ...values,
+          admission:
+            values.admission === "ADMITTED" || values.admission === "NOT_ADMITTED"
+              ? values.admission
+              : null,
+        });
         setOpen(false);
+        router.refresh();
       } catch (e) {
         setErr(e instanceof Error ? e.message : "Ошибка");
       }
@@ -255,7 +310,7 @@ function VkrForm({
           </div>
           <div className="space-y-1.5">
             <Label>Вид</Label>
-            <select {...register("type")} className="flex h-9 w-full rounded-md border border-input bg-background px-3 text-sm shadow-sm">
+            <select {...bindSelect(register("type"), typeVal)} className="flex h-9 w-full rounded-md border border-input bg-background px-3 text-sm shadow-sm">
               <option value="">— не выбрано —</option>
               {vkrTypes.map((t) => <option key={t.id} value={t.name}>{t.name}</option>)}
             </select>
@@ -267,6 +322,20 @@ function VkrForm({
           <div className="space-y-1.5 sm:col-span-2">
             <Label>Дата приказа</Label>
             <Input type="date" {...register("approvedDate")} />
+          </div>
+          <div className="space-y-1.5 sm:col-span-2">
+            <Label>Допуск к защите</Label>
+            <select
+              {...bindSelect(register("admission"), admissionVal)}
+              className="flex h-9 w-full rounded-md border border-input bg-background px-3 text-sm shadow-sm"
+            >
+              <option value="">— не указан —</option>
+              <option value="ADMITTED">Допущен</option>
+              <option value="NOT_ADMITTED">Не допущен</option>
+            </select>
+            <p className="text-xs text-muted-foreground">
+              При «Допущен» дата допуска сохранится автоматически, студент появится во вкладке «Защита».
+            </p>
           </div>
           {err && <p className="sm:col-span-2 text-sm text-destructive">{err}</p>}
           <DialogFooter className="sm:col-span-2">
@@ -280,7 +349,7 @@ function VkrForm({
 }
 
 function Sel({
-  label, value, onChange, options, disabled, optionsLabels,
+  label, value, onChange, options, disabled, optionsLabels, emptyLabel = "— все —",
 }: {
   label: string;
   value: string;
@@ -288,13 +357,14 @@ function Sel({
   options: readonly string[];
   disabled?: boolean;
   optionsLabels?: Record<string, string>;
+  emptyLabel?: string;
 }) {
   return (
     <div className="space-y-1">
       <Label className="text-xs uppercase tracking-wide text-muted-foreground">{label}</Label>
       <select value={value} onChange={(e) => onChange(e.target.value)} disabled={disabled}
         className="flex h-9 w-full rounded-md border border-input bg-background px-3 text-sm shadow-sm disabled:opacity-50">
-        <option value="">— все —</option>
+        <option value="">{emptyLabel}</option>
         {options.map((o) => <option key={o} value={o}>{optionsLabels?.[o] ?? o}</option>)}
       </select>
     </div>
@@ -314,6 +384,7 @@ const addSchema = z.object({
   type: z.string().optional(),
   approvedOrder: z.string().optional(),
   approvedDate: z.string().optional(),
+  admission: z.enum(["", "ADMITTED", "NOT_ADMITTED"]).optional(),
 });
 type AddFormInput = z.infer<typeof addSchema>;
 
@@ -324,6 +395,7 @@ function VkrAddForm({
   rows: VkrRow[];
   vkrTypes: { id: string; name: string }[];
 }) {
+  const router = useRouter();
   const [open, setOpen] = useState(false);
   const [pending, startTransition] = useTransition();
   const [err, setErr] = useState<string | null>(null);
@@ -339,37 +411,42 @@ function VkrAddForm({
       type: "",
       approvedOrder: "",
       approvedDate: "",
+      admission: "",
     },
   });
 
-  const speciality = useWatch({ control, name: "speciality" });
-  const course = useWatch({ control, name: "course" });
-  const groupName = useWatch({ control, name: "groupName" });
+  const speciality = useWatch({ control, name: "speciality" }) ?? "";
+  const course = useWatch({ control, name: "course" }) ?? "";
+  const groupName = useWatch({ control, name: "groupName" }) ?? "";
+  const addStudentIdVal = useWatch({ control, name: "studentId" }) ?? "";
+  const addTypeVal = useWatch({ control, name: "type" }) ?? "";
+  const addAdmissionVal = useWatch({ control, name: "admission" }) ?? "";
 
   // Каскад
   const specialities = useMemo(
     () => Array.from(new Set(rows.map((r) => r.groupSpeciality).filter(Boolean))).sort(),
     [rows]
   );
-  const courses = useMemo(() => {
-    const f = speciality ? rows.filter((r) => r.groupSpeciality === speciality) : rows;
-    return Array.from(new Set(f.map((r) => String(r.course)))).sort();
-  }, [rows, speciality]);
-  const groups = useMemo(() => {
-    const f = rows.filter((r) =>
-      (!speciality || r.groupSpeciality === speciality) &&
-      (!course || String(r.course) === course)
-    );
-    return Array.from(new Set(f.map((r) => r.groupName))).sort();
-  }, [rows, speciality, course]);
+  const afterSpecRows = useMemo(
+    () => (speciality ? rows.filter((r) => r.groupSpeciality === speciality) : rows),
+    [rows, speciality]
+  );
+  const courses = useMemo(
+    () => uniqueCoursesFromGroupNames(afterSpecRows.map((r) => r.groupName)),
+    [afterSpecRows]
+  );
+  const groups = useMemo(
+    () => filterGroupNamesByCourse(afterSpecRows.map((r) => r.groupName), course),
+    [afterSpecRows, course]
+  );
   const students = useMemo(() => {
-    const f = rows.filter((r) =>
-      (!speciality || r.groupSpeciality === speciality) &&
-      (!course || String(r.course) === course) &&
-      (!groupName || r.groupName === groupName)
+    const f = afterSpecRows.filter(
+      (r) =>
+        (!course || groupMatchesCourse(r.groupName, course)) &&
+        (!groupName || r.groupName === groupName)
     );
     return f.map((r) => ({ id: r.studentId, label: r.studentName, hasVkr: !!r.id }));
-  }, [rows, speciality, course, groupName]);
+  }, [afterSpecRows, course, groupName]);
 
   const submit = handleSubmit((values) => {
     setErr(null);
@@ -381,9 +458,14 @@ function VkrAddForm({
           type: values.type,
           approvedOrder: values.approvedOrder,
           approvedDate: values.approvedDate,
+          admission:
+            values.admission === "ADMITTED" || values.admission === "NOT_ADMITTED"
+              ? values.admission
+              : null,
         });
         reset();
         setOpen(false);
+        router.refresh();
       } catch (e) {
         setErr(e instanceof Error ? e.message : "Ошибка");
       }
@@ -399,7 +481,7 @@ function VkrAddForm({
           {/* Каскад */}
           <div className="space-y-1.5 sm:col-span-2">
             <Label>Специальность</Label>
-            <select {...register("speciality")} className="flex h-9 w-full rounded-md border border-input bg-background px-3 text-sm shadow-sm">
+            <select {...bindSelect(register("speciality"), speciality)} className="flex h-9 w-full rounded-md border border-input bg-background px-3 text-sm shadow-sm">
               <option value="">— выберите —</option>
               {specialities.map((s) => <option key={s} value={s}>{s}</option>)}
             </select>
@@ -407,16 +489,16 @@ function VkrAddForm({
           </div>
           <div className="space-y-1.5">
             <Label>Курс</Label>
-            <select {...register("course")} disabled={!speciality}
+            <select {...bindSelect(register("course"), course)} disabled={!speciality}
               className="flex h-9 w-full rounded-md border border-input bg-background px-3 text-sm shadow-sm disabled:opacity-50">
               <option value="">— выберите —</option>
-              {courses.map((c) => <option key={c} value={c}>{c}</option>)}
+              {courses.map((c) => <option key={c} value={String(c)}>{c}</option>)}
             </select>
             {errors.course && <p className="text-xs text-destructive">{errors.course.message}</p>}
           </div>
           <div className="space-y-1.5">
             <Label>Группа</Label>
-            <select {...register("groupName")} disabled={!course}
+            <select {...bindSelect(register("groupName"), groupName)} disabled={!course}
               className="flex h-9 w-full rounded-md border border-input bg-background px-3 text-sm shadow-sm disabled:opacity-50">
               <option value="">— выберите —</option>
               {groups.map((g) => <option key={g} value={g}>{g}</option>)}
@@ -425,7 +507,7 @@ function VkrAddForm({
           </div>
           <div className="space-y-1.5 sm:col-span-2">
             <Label>Студент</Label>
-            <select {...register("studentId")} disabled={!groupName}
+            <select {...bindSelect(register("studentId"), addStudentIdVal)} disabled={!groupName}
               className="flex h-9 w-full rounded-md border border-input bg-background px-3 text-sm shadow-sm disabled:opacity-50">
               <option value="">— выберите —</option>
               {students.map((s) => (
@@ -445,7 +527,7 @@ function VkrAddForm({
           </div>
           <div className="space-y-1.5">
             <Label>Вид</Label>
-            <select {...register("type")} className="flex h-9 w-full rounded-md border border-input bg-background px-3 text-sm shadow-sm">
+            <select {...bindSelect(register("type"), addTypeVal)} className="flex h-9 w-full rounded-md border border-input bg-background px-3 text-sm shadow-sm">
               <option value="">— не выбрано —</option>
               {vkrTypes.map((t) => <option key={t.id} value={t.name}>{t.name}</option>)}
             </select>
@@ -457,6 +539,17 @@ function VkrAddForm({
           <div className="space-y-1.5 sm:col-span-2">
             <Label>Дата приказа</Label>
             <Input type="date" {...register("approvedDate")} />
+          </div>
+          <div className="space-y-1.5 sm:col-span-2">
+            <Label>Допуск к защите</Label>
+            <select
+              {...bindSelect(register("admission"), addAdmissionVal)}
+              className="flex h-9 w-full rounded-md border border-input bg-background px-3 text-sm shadow-sm"
+            >
+              <option value="">— не указан —</option>
+              <option value="ADMITTED">Допущен</option>
+              <option value="NOT_ADMITTED">Не допущен</option>
+            </select>
           </div>
 
           {err && <p className="sm:col-span-2 text-sm text-destructive">{err}</p>}

@@ -13,6 +13,13 @@ import { TeacherStateExamView, type StateExamRow } from "./TeacherStateExamView"
 import { getTeacherPlan } from "@/lib/teacherPlan";
 import { admissionLabel, formatDate, gradeIsPassing } from "@/lib/utils";
 import { Plus, Printer } from "lucide-react";
+import {
+  courseFromGroupName,
+  filterGroupNamesByCourse,
+  filterItemsByGroupCourse,
+  uniqueCoursesFromGroupNames,
+} from "@/lib/group-course";
+import { AutoFilterForm } from "@/components/filters/AutoFilterForm";
 
 export default async function StateExamPage({
   searchParams,
@@ -42,19 +49,24 @@ export default async function StateExamPage({
     );
   }
 
-  const [allStudents, chairs] = await Promise.all([
+  const [allStudents, gekChairs] = await Promise.all([
     prisma.student.findMany({ include: { user: true, group: true }, orderBy: { user: { fullName: "asc" } } }),
-    prisma.user.findMany({ where: { role: { in: ["TEACHER", "HEAD"] } }, orderBy: { fullName: "asc" } }),
+    (prisma.gekChair as any).findMany({ where: { isActive: true }, orderBy: { fullName: "asc" } }),
   ]);
 
   let filteredStudents = allStudents;
   if (params.speciality) filteredStudents = filteredStudents.filter((s) => s.group.speciality === params.speciality);
-  if (params.course) filteredStudents = filteredStudents.filter((s) => String(s.currentCourse) === params.course);
+  if (params.course) filteredStudents = filterItemsByGroupCourse(filteredStudents, params.course);
   if (params.group) filteredStudents = filteredStudents.filter((s) => s.group.name === params.group);
 
   const specialities = Array.from(new Set(allStudents.map((s) => s.group.speciality).filter(Boolean) as string[])).sort();
-  const courses = Array.from(new Set(allStudents.map((s) => s.currentCourse))).sort((a, b) => a - b);
-  const groups = Array.from(new Set(filteredStudents.map((s) => s.group.name))).sort();
+  const courses = uniqueCoursesFromGroupNames(allStudents.map((s) => s.group.name));
+  const groups = params.course
+    ? filterGroupNamesByCourse(
+        (params.speciality ? filteredStudents : allStudents).map((s) => s.group.name),
+        params.course
+      )
+    : [];
 
   const filteredStudentIds = filteredStudents.map((s) => s.id);
   const hasFilters = !!(isStudent || studentId || params.speciality || params.course || params.group || params.admission || params.dateFrom || params.dateTo);
@@ -74,13 +86,18 @@ export default async function StateExamPage({
         }
       } : {}),
     },
-    include: { student: { include: { user: true, group: true } }, chair: true },
+    include: { student: { include: { user: true, group: true } }, chair: true, chairGek: true } as any,
     orderBy: { date: "desc" },
     ...(hasFilters ? {} : { take: 10 }),
   });
 
-  const oS = allStudents.map((s) => ({ id: s.id, label: `${s.user.fullName} (${s.group.name})` }));
-  const oCh = chairs.map((c) => ({ id: c.id, label: c.fullName }));
+  const oS = allStudents.map((s) => ({
+    id: s.id,
+    label: s.user.fullName,
+    groupName: s.group.name,
+    speciality: s.group.speciality ?? "",
+  }));
+  const oCh = (gekChairs as Array<{ id: string; fullName: string }>).map((c) => ({ id: c.id, label: c.fullName }));
 
   const reportParams = new URLSearchParams();
   if (params.speciality) reportParams.set("speciality", params.speciality);
@@ -114,10 +131,17 @@ export default async function StateExamPage({
         <Card>
           <CardHeader className="pb-3"><CardTitle className="text-base">Фильтры</CardTitle></CardHeader>
           <CardContent>
-            <form className="grid sm:grid-cols-3 gap-3" action="/state-exam" method="get">
+            <AutoFilterForm action="/state-exam" className="grid sm:grid-cols-3 gap-3">
               <Sel name="speciality" label="Специальность" value={params.speciality ?? ""} opts={specialities.map((s) => ({ v: s, l: s }))} />
               <Sel name="course" label="Курс" value={params.course ?? ""} opts={courses.map((c) => ({ v: String(c), l: String(c) }))} />
-              <Sel name="group" label="Группа" value={params.group ?? ""} opts={groups.map((g) => ({ v: g, l: g }))} />
+              <Sel
+                name="group"
+                label="Группа"
+                value={params.group ?? ""}
+                opts={groups.map((g) => ({ v: g, l: g }))}
+                disabled={!params.course}
+                emptyLabel={params.course ? "— все —" : "Сначала курс"}
+              />
               <Sel name="studentId" label="Студент" value={studentId ?? ""} opts={filteredStudents.map((s) => ({ v: s.id, l: `${s.user.fullName} (${s.group.name})` }))} />
               <Sel name="admission" label="Допуск" value={params.admission ?? ""} opts={[{ v: "ADMITTED", l: "Допущен" }, { v: "NOT_ADMITTED", l: "Не допущен" }]} />
               <div className="space-y-1">
@@ -129,13 +153,9 @@ export default async function StateExamPage({
                 <input type="date" name="dateTo" defaultValue={params.dateTo ?? ""} className="flex h-9 w-full rounded-md border border-input bg-background px-3 text-sm shadow-sm" />
               </div>
               <div className="flex gap-2 items-end sm:col-span-3">
-                <Button type="submit" variant="outline" size="sm">Применить</Button>
                 {hasFilters && <Button type="button" variant="ghost" size="sm" asChild><Link href="/state-exam">Сбросить</Link></Button>}
-                <span className="text-xs text-muted-foreground self-center ml-2">
-                  {hasFilters ? `Найдено: ${items.length}` : `Последние 10 из всех`}
-                </span>
               </div>
-            </form>
+            </AutoFilterForm>
           </CardContent>
         </Card>
       )}
@@ -168,7 +188,7 @@ export default async function StateExamPage({
                 <TableCell>
                   {e.grade ? <Badge variant={gradeIsPassing(e.grade) ? "success" : "destructive"}>{e.grade}</Badge> : "—"}
                 </TableCell>
-                <TableCell>{e.chair?.fullName ?? "—"}</TableCell>
+                <TableCell>{(e as any).chairGek?.fullName ?? e.chair?.fullName ?? "—"}</TableCell>
                 <TableCell>{e.protocolNumber ?? "—"}</TableCell>
                 {!isStudent && (
                   <TableCell className="text-right">
@@ -178,9 +198,9 @@ export default async function StateExamPage({
                         studentId: e.studentId, name: e.name, admission: e.admission as Admission,
                         admissionDate: e.admissionDate ? e.admissionDate.toISOString().slice(0, 10) : "",
                         date: e.date ? e.date.toISOString().slice(0, 10) : "",
-                        grade: e.grade ?? "", chairId: e.chairId ?? "",
+                        grade: e.grade ?? "", chairGekId: (e as any).chairGekId ?? "",
                         protocolNumber: e.protocolNumber ?? "",
-                      }}
+                      } as any}
                       students={oS} chairs={oCh}
                       canEdit={can(session, "stateExam:edit")}
                     />
@@ -220,7 +240,8 @@ async function TeacherFlow({
     include: {
       student: { include: { user: true, group: true } },
       chair: true,
-    },
+      chairGek: true,
+    } as any,
     orderBy: { date: "desc" },
   });
 
@@ -230,13 +251,13 @@ async function TeacherFlow({
     studentName: e.student.user.fullName,
     groupName: e.student.group.name,
     groupSpeciality: e.student.group.speciality ?? "",
-    course: e.student.currentCourse,
+    course: courseFromGroupName(e.student.group.name) ?? e.student.currentCourse,
     name: e.name,
     admission: e.admission,
     admissionDate: e.admissionDate,
     date: e.date,
     grade: e.grade,
-    chairName: e.chair?.fullName ?? null,
+    chairName: (e as any).chairGek?.fullName ?? e.chair?.fullName ?? null,
   }));
 
   return (
@@ -247,12 +268,26 @@ async function TeacherFlow({
   );
 }
 
-function Sel({ name, label, value, opts }: { name: string; label: string; value: string; opts: { v: string; l: string }[] }) {
+function Sel({
+  name, label, value, opts, disabled, emptyLabel = "— все —",
+}: {
+  name: string;
+  label: string;
+  value: string;
+  opts: { v: string; l: string }[];
+  disabled?: boolean;
+  emptyLabel?: string;
+}) {
   return (
     <div className="space-y-1">
       <label className="text-xs uppercase tracking-wide text-muted-foreground block">{label}</label>
-      <select name={name} defaultValue={value} className="flex h-9 w-full rounded-md border border-input bg-background px-3 text-sm shadow-sm">
-        <option value="">— все —</option>
+      <select
+        name={name}
+        defaultValue={value}
+        disabled={disabled}
+        className="flex h-9 w-full rounded-md border border-input bg-background px-3 text-sm shadow-sm disabled:opacity-50"
+      >
+        <option value="">{emptyLabel}</option>
         {opts.map((o) => <option key={o.v} value={o.v}>{o.l}</option>)}
       </select>
     </div>

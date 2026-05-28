@@ -1,8 +1,9 @@
 import { requireRole } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { PrintBar } from "@/components/documents/PrintBar";
-import { DocumentHeader, DocumentSignatures } from "@/components/documents/DocumentHeader";
+import { DocumentHeader, TeacherReportFooter } from "@/components/documents/DocumentHeader";
 import { formatDate } from "@/lib/utils";
+import { groupMatchesCourse } from "@/lib/group-course";
 
 export default async function VkrReportPage({
   searchParams,
@@ -36,7 +37,7 @@ export default async function VkrReportPage({
   const rows = vkrs.filter((v) => {
     const sp2 = v.student.group.speciality ?? "";
     if (sp.speciality && sp2 !== sp.speciality) return false;
-    if (sp.course && String(v.student.currentCourse) !== sp.course) return false;
+    if (sp.course && !groupMatchesCourse(v.student.group.name, sp.course)) return false;
     if (sp.group && v.student.group.name !== sp.group) return false;
     if (sp.studentId && v.studentId !== sp.studentId) return false;
     return true;
@@ -44,13 +45,13 @@ export default async function VkrReportPage({
 
   return (
     <>
-      <PrintBar />
-      <div className="document p-[24mm]">
+      <PrintBar filename="Отчёт ВКР" />
+      <div className="document p-[15mm_20mm]">
         <DocumentHeader
           institution={institution}
           title="Отчёт по ВКР"
-          subtitle={session.fullName}
           generatedAt={new Date()}
+          showDateInHeader={false}
         />
 
         {rows.length === 0 ? (
@@ -59,13 +60,13 @@ export default async function VkrReportPage({
           <table>
             <thead>
               <tr>
-                <th>№</th>
-                <th>Студент</th>
-                <th>Группа</th>
-                <th>Тема</th>
-                <th>Вид</th>
-                <th>Приказ</th>
-                <th>Руководитель</th>
+                <th style={{ width: "4%" }}>№</th>
+                <th style={{ width: "18%" }}>Студент</th>
+                <th style={{ width: "8%" }}>Группа</th>
+                <th style={{ width: "32%" }}>Тема</th>
+                <th style={{ width: "10%" }}>Вид</th>
+                <th style={{ width: "12%" }}>Приказ</th>
+                <th style={{ width: "16%" }}>Руководитель</th>
               </tr>
             </thead>
             <tbody>
@@ -86,10 +87,12 @@ export default async function VkrReportPage({
           </table>
         )}
 
-        <p className="text-[11px] mt-3">Всего: {rows.length}.</p>
-        <DocumentSignatures
-          left={{ title: session.role === "HEAD" ? "Заведующий отделением" : "Преподаватель", name: session.fullName }}
-          right={{ title: "Дата" }}
+        <TeacherReportFooter
+          teacherName={session.fullName}
+          institution={institution}
+          date={new Date()}
+          showDate={false}
+          showTeacherSignature={session.role !== "HEAD"}
         />
       </div>
     </>

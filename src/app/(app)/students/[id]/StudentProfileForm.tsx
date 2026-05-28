@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { studentProfileSchema, type StudentProfileInput } from "@/schemas/student";
 import { updateStudentProfile } from "./actions";
+import { controlledSelectProps } from "@/components/forms/controlled-select";
 
 type Opt = { id: string; label: string };
 
@@ -79,10 +80,20 @@ export function StudentProfileForm({
 
       <section className="space-y-3">
         <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Академический отпуск</h3>
-        <p className="text-xs text-muted-foreground -mt-1">При указании обоих полей студент переходит в архив (акад. отпуск).</p>
+        <p className="text-xs text-muted-foreground -mt-1">
+          Укажите дату начала, дату окончания и приказ. В архив студент попадает с даты начала; после даты окончания профиль
+          автоматически снова станет активным (при открытии раздела «Студенты»).
+        </p>
         <div className="grid sm:grid-cols-2 gap-4">
-          <F label="Дата акад. отпуска" err={errors.academicLeaveDate?.message}><Input type="date" {...register("academicLeaveDate")} /></F>
-          <F label="Приказ об акад. отпуске" err={errors.academicLeaveOrder?.message}><Input {...register("academicLeaveOrder")} /></F>
+          <F label="Дата начала" err={errors.academicLeaveDate?.message}>
+            <Input type="date" {...register("academicLeaveDate")} />
+          </F>
+          <F label="Дата окончания" err={errors.academicLeaveEndDate?.message}>
+            <Input type="date" {...register("academicLeaveEndDate")} />
+          </F>
+          <F label="Приказ об акад. отпуске" err={errors.academicLeaveOrder?.message} className="sm:col-span-2">
+            <Input {...register("academicLeaveOrder")} />
+          </F>
         </div>
       </section>
 
@@ -100,7 +111,7 @@ function Sel({ label, options, err, ...rest }: { label: string; options: Opt[]; 
   return (
     <div className="space-y-1.5">
       <Label>{label}</Label>
-      <select {...rest} className="flex h-9 w-full rounded-md border border-input bg-background px-3 text-sm shadow-sm">
+      <select {...controlledSelectProps(rest)} className="flex h-9 w-full rounded-md border border-input bg-background px-3 text-sm shadow-sm">
         <option value="">— не выбрано —</option>
         {options.map((o) => <option key={o.id} value={o.id}>{o.label}</option>)}
       </select>

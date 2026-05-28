@@ -6,6 +6,13 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { ClipboardList, X, Printer } from "lucide-react";
+import { filterGroupNamesByCourse, groupMatchesCourse, uniqueCoursesFromGroupNames } from "@/lib/group-course";
+
+const CONTROL_FORM_LABELS: Record<string, string> = {
+  EXAM:          "Экзамен",
+  CREDIT:        "Зачёт",
+  GRADED_CREDIT: "Дифференцированный зачёт",
+};
 
 export type PlanCardItem = {
   id: string;
@@ -16,9 +23,16 @@ export type PlanCardItem = {
   semesterNumber: number;
   academicYear: string;
   hours: number | null;
+  controlForm: string | null;
 };
 
-export function TeacherPlanList({ items }: { items: PlanCardItem[] }) {
+export function TeacherPlanList({
+  items,
+  emptyMessage,
+}: {
+  items: PlanCardItem[];
+  emptyMessage?: string;
+}) {
   const [speciality, setSpeciality] = useState("");
   const [course, setCourse] = useState("");
   const [groupName, setGroupName] = useState("");
@@ -34,16 +48,16 @@ export function TeacherPlanList({ items }: { items: PlanCardItem[] }) {
     [items, speciality]
   );
   const courses = useMemo(
-    () => Array.from(new Set(afterSpec.map((i) => String(i.course)))).sort(),
+    () => uniqueCoursesFromGroupNames(afterSpec.map((i) => i.groupName)),
     [afterSpec]
   );
-  const afterCourse = useMemo(
-    () => (course ? afterSpec.filter((i) => String(i.course) === course) : afterSpec),
+  const groups = useMemo(
+    () => filterGroupNamesByCourse(afterSpec.map((i) => i.groupName), course),
     [afterSpec, course]
   );
-  const groups = useMemo(
-    () => Array.from(new Set(afterCourse.map((i) => i.groupName))).sort(),
-    [afterCourse]
+  const afterCourse = useMemo(
+    () => (course ? afterSpec.filter((i) => groupMatchesCourse(i.groupName, course)) : afterSpec),
+    [afterSpec, course]
   );
   const semesters = useMemo(
     () => Array.from(new Set(items.map((i) => String(i.semesterNumber)))).sort(),
@@ -57,7 +71,7 @@ export function TeacherPlanList({ items }: { items: PlanCardItem[] }) {
   const filtered = useMemo(() => {
     return items.filter((i) => {
       if (speciality && i.speciality !== speciality) return false;
-      if (course && String(i.course) !== course) return false;
+      if (course && !groupMatchesCourse(i.groupName, course)) return false;
       if (groupName && i.groupName !== groupName) return false;
       if (semester && String(i.semesterNumber) !== semester) return false;
       if (discipline && i.discipline !== discipline) return false;
@@ -67,7 +81,12 @@ export function TeacherPlanList({ items }: { items: PlanCardItem[] }) {
 
   const hasFilters = !!(speciality || course || groupName || semester || discipline);
   const printUrl = `/print/teacher-plan?${new URLSearchParams({
-    speciality, course, group: groupName, semester, discipline,
+    kind: "ASSESSMENT",
+    speciality,
+    course,
+    group: groupName,
+    semester,
+    discipline,
   } as Record<string, string>).toString()}`;
 
   return (
@@ -85,7 +104,7 @@ export function TeacherPlanList({ items }: { items: PlanCardItem[] }) {
               label="Курс"
               value={course}
               onChange={(v) => { setCourse(v); setGroupName(""); }}
-              options={courses}
+              options={courses.map(String)}
               disabled={courses.length === 0}
             />
             <Sel
@@ -93,7 +112,8 @@ export function TeacherPlanList({ items }: { items: PlanCardItem[] }) {
               value={groupName}
               onChange={setGroupName}
               options={groups}
-              disabled={groups.length === 0}
+              disabled={!course || groups.length === 0}
+              emptyLabel={course ? "— все —" : "Сначала курс"}
             />
             <Sel
               label="Семестр"
@@ -108,10 +128,7 @@ export function TeacherPlanList({ items }: { items: PlanCardItem[] }) {
               options={disciplines}
             />
           </div>
-          <div className="flex items-center justify-between gap-2 text-xs">
-            <span className="text-muted-foreground">
-              Дисциплин: <span className="font-medium">{filtered.length}</span> из {items.length}
-            </span>
+          <div className="flex items-center justify-end gap-2 text-xs">
             <div className="flex gap-2">
               <Button asChild variant="outline" size="sm">
                 <Link href={printUrl} target="_blank">
@@ -132,7 +149,12 @@ export function TeacherPlanList({ items }: { items: PlanCardItem[] }) {
       {filtered.length === 0 ? (
         <Card><CardContent className="p-8 text-center text-muted-foreground space-y-2">
           <ClipboardList className="h-10 w-10 mx-auto opacity-30" />
-          <p>{hasFilters ? "По выбранным фильтрам дисциплин нет." : "В вашем плане ещё нет дисциплин по промежуточной аттестации."}</p>
+          <p>
+            {emptyMessage ??
+              (hasFilters
+                ? "По выбранным фильтрам дисциплин нет."
+                : "В вашем плане ещё нет дисциплин.")}
+          </p>
         </CardContent></Card>
       ) : (
         <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
@@ -147,6 +169,11 @@ export function TeacherPlanList({ items }: { items: PlanCardItem[] }) {
                 <div>Группа <b className="text-foreground">{it.groupName}</b></div>
                 <div>{it.semesterNumber} семестр · {it.academicYear} уч. г.</div>
                 {it.hours != null && it.hours > 0 && <div>{it.hours} часов</div>}
+                {it.controlForm && (
+                  <div className="text-xs font-medium text-foreground/80">
+                    {CONTROL_FORM_LABELS[it.controlForm] ?? it.controlForm}
+                  </div>
+                )}
                 {it.speciality && <div className="text-xs truncate">{it.speciality}</div>}
               </div>
             </Link>
@@ -158,13 +185,14 @@ export function TeacherPlanList({ items }: { items: PlanCardItem[] }) {
 }
 
 function Sel({
-  label, value, onChange, options, disabled,
+  label, value, onChange, options, disabled, emptyLabel = "— все —",
 }: {
   label: string;
   value: string;
   onChange: (v: string) => void;
   options: string[];
   disabled?: boolean;
+  emptyLabel?: string;
 }) {
   return (
     <div className="space-y-1">
@@ -175,7 +203,7 @@ function Sel({
         disabled={disabled}
         className="flex h-9 w-full rounded-md border border-input bg-background px-3 text-sm shadow-sm disabled:opacity-50"
       >
-        <option value="">— все —</option>
+        <option value="">{emptyLabel}</option>
         {options.map((o) => <option key={o} value={o}>{o}</option>)}
       </select>
     </div>

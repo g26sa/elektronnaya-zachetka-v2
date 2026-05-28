@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { saveVkrType, deleteVkrType } from "./actions";
 import { Trash2 } from "lucide-react";
+import { useConfirm } from "@/components/ui/confirm-dialog";
 
 export function VkrTypeForm({
   trigger, initial,
@@ -61,20 +62,24 @@ export function VkrTypeForm({
 
 export function VkrTypeDeleteButton({ id, name }: { id: string; name: string }) {
   const [pending, startTransition] = useTransition();
+  const [ask, ConfirmNode] = useConfirm();
   return (
-    <Button
-      variant="ghost"
-      size="icon"
-      disabled={pending}
-      onClick={() => {
-        if (!confirm(`Удалить вид «${name}»?`)) return;
-        startTransition(async () => {
-          try { await deleteVkrType(id); }
-          catch (e) { alert(e instanceof Error ? e.message : "Ошибка"); }
-        });
-      }}
-    >
-      <Trash2 className="h-4 w-4 text-destructive" />
-    </Button>
+    <>
+      {ConfirmNode}
+      <Button
+        variant="ghost"
+        size="icon"
+        disabled={pending}
+        onClick={async () => {
+          if (!(await ask(`Удалить вид «${name}»?`))) return;
+          startTransition(async () => {
+            try { await deleteVkrType(id); }
+            catch (e) { alert(e instanceof Error ? e.message : "Ошибка"); }
+          });
+        }}
+      >
+        <Trash2 className="h-4 w-4 text-destructive" />
+      </Button>
+    </>
   );
 }

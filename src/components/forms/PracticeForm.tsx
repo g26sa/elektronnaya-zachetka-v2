@@ -9,6 +9,7 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogT
 import { practiceSchema, type PracticeInput } from "@/schemas/practice";
 import { createPractice, updatePractice } from "@/app/(app)/practice/actions";
 import { GradeSelect } from "./GradeSelect";
+import { controlledSelectProps } from "./controlled-select";
 
 type Opt = { id: string; label: string };
 
@@ -73,16 +74,11 @@ export function PracticeForm({
             options={[{id:"EDUCATIONAL",label:"Учебная"},{id:"PRODUCTION",label:"Производственная"},{id:"PREDIPLOMA",label:"Преддипломная"}]}
             err={errors.kind?.message}/>
           <F label="Место" err={errors.place?.message} className="sm:col-span-2"><Input {...register("place")} /></F>
+          <input type="hidden" {...register("creditUnits")} />
           {lockTeacher ? (
-            <>
-              <input type="hidden" {...register("hours")} />
-              <input type="hidden" {...register("creditUnits")} />
-            </>
+            <input type="hidden" {...register("hours")} />
           ) : (
-            <>
-              <F label="Часы" err={errors.hours?.message}><Input type="number" min={0} {...register("hours")} /></F>
-              <F label="З.е." err={errors.creditUnits?.message}><Input type="number" min={0} step={0.5} {...register("creditUnits")} /></F>
-            </>
+            <F label="Часы" err={errors.hours?.message}><Input type="number" min={0} {...register("hours")} /></F>
           )}
           <F label="Начало" err={errors.startDate?.message}><Input type="date" {...register("startDate")} /></F>
           <F label="Окончание" err={errors.endDate?.message}><Input type="date" {...register("endDate")} /></F>
@@ -114,7 +110,7 @@ function Sel({ label, options, err, ...rest }: { label: string; options: Opt[]; 
   return (
     <div className="space-y-1.5">
       <Label>{label}</Label>
-      <select {...rest} className="flex h-9 w-full rounded-md border border-input bg-background px-3 text-sm shadow-sm">
+      <select {...controlledSelectProps(rest)} className="flex h-9 w-full rounded-md border border-input bg-background px-3 text-sm shadow-sm">
         <option value="">— не выбрано —</option>
         {options.map(o => <option key={o.id} value={o.id}>{o.label}</option>)}
       </select>

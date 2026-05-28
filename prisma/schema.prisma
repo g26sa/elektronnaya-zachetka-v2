@@ -53,6 +53,7 @@ model TeachingAssignment {
   id           String      @id @default(cuid())
   teacherId    String
   kind         String
+  controlForm  String?
   semesterId   String?
   disciplineId String?
   groupId      String?
@@ -80,15 +81,25 @@ model VkrType {
   updatedAt DateTime @updatedAt
 }
 
-model GekChair {
+model DisciplineType {
   id        String   @id @default(cuid())
-  fullName  String
-  position  String?
-  year      Int?
-  notes     String?
+  name      String   @unique
   isActive  Boolean  @default(true)
+  sortOrder Int      @default(0)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+model GekChair {
+  id          String      @id @default(cuid())
+  fullName    String
+  position    String?
+  year        Int?
+  notes       String?
+  isActive    Boolean     @default(true)
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+  stateExams  StateExam[]
 }
 
 model Notification {
@@ -136,8 +147,9 @@ model Student {
   expulsionDate       DateTime?
   expulsionOrder      String?
   currentCourse       Int                  @default(1)
-  academicLeaveDate   DateTime?
-  academicLeaveOrder  String?
+  academicLeaveDate    DateTime?
+  academicLeaveEndDate DateTime?
+  academicLeaveOrder   String?
   archiveReason       String?
   assessments         Assessment[]
   courseWorks         CourseWork[]
@@ -280,10 +292,12 @@ model StateExam {
   date           DateTime?
   grade          String?
   chairId        String?
+  chairGekId     String?
   protocolNumber String?
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
   chair          User?     @relation("StateExamChair", fields: [chairId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  chairGek       GekChair? @relation(fields: [chairGekId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   student        Student   @relation(fields: [studentId], references: [id], onUpdate: NoAction)
 
   @@index([studentId])

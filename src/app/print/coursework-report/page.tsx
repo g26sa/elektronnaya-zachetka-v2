@@ -1,8 +1,9 @@
-import { requireRole } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { PrintBar } from "@/components/documents/PrintBar";
-import { DocumentHeader, DocumentSignatures } from "@/components/documents/DocumentHeader";
+import { DocumentHeader, TeacherReportFooter } from "@/components/documents/DocumentHeader";
 import { formatDate } from "@/lib/utils";
+import { requireReportSession, resolveOwnStudentId } from "@/lib/student-print";
+import { groupMatchesCourse } from "@/lib/group-course";
 
 /**
  * Отчёт по курсовым с учётом фильтров из querystring.
@@ -18,13 +19,18 @@ export default async function CourseworkReportPage({
     semester?: string; studentId?: string; scope?: string;
   }>;
 }) {
-  const session = await requireRole("TEACHER", "HEAD");
+  const session = await requireReportSession();
   const sp = await searchParams;
+  const ownStudentId = session.role === "STUDENT" ? await resolveOwnStudentId(session) : null;
+  const filterStudentId = ownStudentId ?? sp.studentId;
 
-  const [institution, all] = await Promise.all([
+  const [institution, all, reportStudent] = await Promise.all([
     prisma.institution.findFirst(),
     prisma.courseWork.findMany({
-      where: { ...(session.role === "TEACHER" ? { teacherId: session.userId } : {}) },
+      where: {
+        ...(session.role === "TEACHER" ? { teacherId: session.userId } : {}),
+        ...(filterStudentId ? { studentId: filterStudentId } : {}),
+      },
       include: {
         student: { include: { user: true, group: true } },
         semester: true,
@@ -33,15 +39,21 @@ export default async function CourseworkReportPage({
       },
       orderBy: [{ assignedAt: "desc" }, { date: "desc" }],
     }),
+    filterStudentId
+      ? prisma.student.findUnique({
+          where: { id: filterStudentId },
+          include: { user: true },
+        })
+      : Promise.resolve(null),
   ]);
 
   const filtered = all.filter((c) => {
     if (sp.speciality && (c.student.group.speciality ?? "") !== sp.speciality) return false;
-    if (sp.course && String(c.semester.course) !== sp.course) return false;
+    if (sp.course && !groupMatchesCourse(c.student.group.name, sp.course)) return false;
     if (sp.group && c.student.group.name !== sp.group) return false;
     if (sp.discipline && c.discipline.name !== sp.discipline) return false;
     if (sp.semester && String(c.semester.number) !== sp.semester) return false;
-    if (sp.studentId && c.studentId !== sp.studentId) return false;
+    if (filterStudentId && c.studentId !== filterStudentId) return false;
     if (sp.scope === "graded" && !c.grade) return false;
     if (sp.scope === "topicOnly" && c.grade) return false;
     return true;
@@ -52,13 +64,13 @@ export default async function CourseworkReportPage({
 
   return (
     <>
-      <PrintBar />
-      <div className="document p-[24mm]">
+      <PrintBar filename={title} />
+      <div className="document p-[15mm_20mm]">
         <DocumentHeader
           institution={institution}
           title={title}
-          subtitle={session.fullName}
           generatedAt={new Date()}
+          showDateInHeader={false}
         />
 
         {filtered.length === 0 ? (
@@ -67,14 +79,14 @@ export default async function CourseworkReportPage({
           <table>
             <thead>
               <tr>
-                <th>№</th>
-                <th>Студент</th>
-                <th>Группа</th>
-                <th>Семестр</th>
-                <th>Дисциплина</th>
-                <th>Тема</th>
-                <th>Оценка</th>
-                <th>Дата</th>
+                <th style={{ width: "4%" }}>№</th>
+                <th style={{ width: "18%" }}>Студент</th>
+                <th style={{ width: "8%" }}>Группа</th>
+                <th style={{ width: "6%" }}>Сем.</th>
+                <th style={{ width: "18%" }}>Дисциплина</th>
+                <th style={{ width: "28%" }}>Тема</th>
+                <th style={{ width: "8%" }}>Оценка</th>
+                <th style={{ width: "10%" }}>Дата</th>
               </tr>
             </thead>
             <tbody>
@@ -96,18 +108,24 @@ export default async function CourseworkReportPage({
           </table>
         )}
 
-        <p className="text-[11px] mt-4">
-          {sp.speciality && `Специальность: «${sp.speciality}». `}
-          {sp.group && `Группа: ${sp.group}. `}
-          {sp.discipline && `Дисциплина: «${sp.discipline}». `}
-          {sp.semester && `${sp.semester} семестр. `}
-          Всего: {filtered.length}.
-        </p>
+        {(sp.speciality || sp.group || sp.discipline || sp.semester) && (
+          <p className="text-[11px] mt-4">
+            {sp.speciality && `Специальность: «${sp.speciality}». `}
+            {sp.group && `Группа: ${sp.group}. `}
+            {sp.discipline && `Дисциплина: «${sp.discipline}». `}
+            {sp.semester && `${sp.semester} семестр. `}
+          </p>
+        )}
 
-        <DocumentSignatures
-          left={{ title: session.role === "HEAD" ? "Заведующий отделением" : "Преподаватель", name: session.fullName }}
-          right={{ title: "Дата" }}
-        />
+        {session.role !== "STUDENT" && (
+          <TeacherReportFooter
+            teacherName={session.fullName}
+            institution={institution}
+            date={new Date()}
+            showDate={false}
+            showTeacherSignature={session.role !== "HEAD"}
+          />
+        )}
       </div>
     </>
   );

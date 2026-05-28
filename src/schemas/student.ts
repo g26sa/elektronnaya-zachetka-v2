@@ -15,7 +15,18 @@ export const studentProfileSchema = z.object({
   expulsionDate: z.string().optional().nullable(),
   expulsionOrder: z.string().optional().nullable(),
   academicLeaveDate: z.string().optional().nullable(),
+  academicLeaveEndDate: z.string().optional().nullable(),
   academicLeaveOrder: z.string().optional().nullable(),
   currentCourse: z.coerce.number().int().positive(),
+}).superRefine((data, ctx) => {
+  if (data.academicLeaveDate && data.academicLeaveEndDate) {
+    if (data.academicLeaveEndDate < data.academicLeaveDate) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Дата окончания не может быть раньше даты начала",
+        path: ["academicLeaveEndDate"],
+      });
+    }
+  }
 });
 export type StudentProfileInput = z.infer<typeof studentProfileSchema>;

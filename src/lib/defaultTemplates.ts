@@ -35,28 +35,28 @@ export const DEFAULT_TEMPLATES: { code: string; name: string; description: strin
     <tr><th>Приказ о зачислении</th><td>{{student.enrollmentOrder}}</td></tr>
   </table>
 
-  <p class="text-[11px] text-right mt-4">Дата формирования: {{today}}</p>
+  {{#if today}}<p class="text-[11px] text-right mt-4">Дата формирования: {{today}}</p>{{/if}}
 
 </div>`,
   },
   {
     code: "ATTESTATION_REPORT",
-    name: "Сводная ведомость промежуточной аттестации",
+    name: "Сводная ведомость по дисциплинам",
     description: "Сводная таблица всех оценок студента",
     content: `<div class="document">
   <header class="text-center border-b border-black pb-3 mb-6">
     <div class="text-[12px] uppercase">{{institution.name}}</div>
     {{#if institution.departmentName}}<div class="text-[11px]">{{institution.departmentName}}</div>{{/if}}
-    <h1>Сводная ведомость промежуточной аттестации</h1>
+    <h1>Сводная ведомость по дисциплинам</h1>
     <p class="text-[12px]">Студент: {{student.fullName}} · группа {{student.group}}</p>
     <p class="text-[12px]">Зачётная книжка № {{student.recordBookNumber}}</p>
-    <p class="text-[11px] text-right">Дата формирования: {{today}}</p>
+    {{#if today}}<p class="text-[11px] text-right">Дата формирования: {{today}}</p>{{/if}}
   </header>
 
   <table>
     <thead>
       <tr>
-        <th>№</th><th>Семестр</th><th>Дисциплина</th><th>Часы / з.е.</th><th>Тип</th><th>Оценка</th><th>Дата</th><th>Преподаватель</th>
+        <th>№</th><th>Семестр</th><th>Дисциплина</th><th>Тип</th><th>Оценка</th><th>Дата</th><th>Преподаватель</th>
       </tr>
     </thead>
     <tbody>
@@ -65,8 +65,43 @@ export const DEFAULT_TEMPLATES: { code: string; name: string; description: strin
         <td class="text-center">{{@index}}</td>
         <td>{{semester}}</td>
         <td>{{discipline}}</td>
-        <td class="text-center">{{hours}} / {{creditUnits}}</td>
         <td>{{type}}</td>
+        <td class="text-center"><b>{{grade}}</b></td>
+        <td class="text-center">{{date}}</td>
+        <td>{{teacher}}</td>
+      </tr>
+      {{/each}}
+    </tbody>
+  </table>
+
+</div>`,
+  },
+  {
+    code: "COURSEWORK_REPORT",
+    name: "Отчёт по курсовым работам",
+    description: "Сводный отчёт по курсовым работам студента",
+    content: `<div class="document">
+  <header class="text-center border-b border-black pb-3 mb-6">
+    <div class="text-[12px] uppercase">{{institution.name}}</div>
+    {{#if institution.departmentName}}<div class="text-[11px]">{{institution.departmentName}}</div>{{/if}}
+    <h1>Курсовые работы</h1>
+    <p class="text-[12px]">{{student.fullName}} · группа {{student.group}}</p>
+    {{#if today}}<p class="text-[11px] text-right">Дата формирования: {{today}}</p>{{/if}}
+  </header>
+
+  <table>
+    <thead>
+      <tr>
+        <th>№</th><th>Семестр</th><th>Дисциплина</th><th>Тема</th><th>Оценка</th><th>Дата</th><th>Руководитель</th>
+      </tr>
+    </thead>
+    <tbody>
+      {{#each courseWorks}}
+      <tr>
+        <td>{{@index}}</td>
+        <td>{{semester}}</td>
+        <td>{{discipline}}</td>
+        <td>{{topic}}</td>
         <td class="text-center"><b>{{grade}}</b></td>
         <td class="text-center">{{date}}</td>
         <td>{{teacher}}</td>
@@ -87,14 +122,14 @@ export const DEFAULT_TEMPLATES: { code: string; name: string; description: strin
     {{#if institution.departmentName}}<div class="text-[11px]">{{institution.departmentName}}</div>{{/if}}
     <h1>Отчёт о прохождении практики</h1>
     <p class="text-[12px]">{{student.fullName}} · группа {{student.group}}</p>
-    <p class="text-[11px] text-right">Дата формирования: {{today}}</p>
+    {{#if today}}<p class="text-[11px] text-right">Дата формирования: {{today}}</p>{{/if}}
   </header>
 
   <table>
     <thead>
       <tr>
         <th>№</th><th>Курс</th><th>Семестр</th><th>Вид</th><th>Место</th>
-        <th>Часы / з.е.</th><th>Период</th><th>Оценка</th>
+        <th>Период</th><th>Оценка</th>
         <th>Руководитель от учреждения</th><th>Руководитель от организации</th>
       </tr>
     </thead>
@@ -106,7 +141,6 @@ export const DEFAULT_TEMPLATES: { code: string; name: string; description: strin
         <td>{{semester}}</td>
         <td>{{kind}}</td>
         <td>{{place}}</td>
-        <td class="text-center">{{hours}} / {{creditUnits}}</td>
         <td class="text-center">{{startDate}} — {{endDate}}</td>
         <td class="text-center"><b>{{grade}}</b></td>
         <td>{{instSupervisor}}</td>
@@ -128,7 +162,7 @@ export const DEFAULT_TEMPLATES: { code: string; name: string; description: strin
     {{#if institution.departmentName}}<div class="text-[11px]">{{institution.departmentName}}</div>{{/if}}
     <h1>Выпускная квалификационная работа</h1>
     <p class="text-[12px]">{{student.fullName}} · {{student.group}}</p>
-    <p class="text-[11px] text-right">Дата формирования: {{today}}</p>
+    {{#if today}}<p class="text-[11px] text-right">Дата формирования: {{today}}</p>{{/if}}
   </header>
 
   {{#if vkr}}

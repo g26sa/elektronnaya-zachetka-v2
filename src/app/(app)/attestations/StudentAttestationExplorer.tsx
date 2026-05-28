@@ -13,7 +13,6 @@ type RawAssessment = {
   id: string;
   discipline: { name: string };
   hours: number | null;
-  creditUnits: number | null;
   type: string;
   grade: string;
   date: Date | string;
@@ -114,7 +113,6 @@ export function StudentAttestationExplorer({
         id: a.id,
         discipline: a.discipline,
         hours: a.hours,
-        creditUnits: a.creditUnits,
         type: a.type,
         grade: a.grade,
         date: a.date as Date,

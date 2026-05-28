@@ -11,6 +11,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { admissionLabel, formatDate, gradeIsPassing } from "@/lib/utils";
 import { X, Printer, Search } from "lucide-react";
 import type { TeacherListFilters } from "@/lib/teacher-plan-display";
+import { filterGroupNamesByCourse, groupMatchesCourse, uniqueCoursesFromGroupNames } from "@/lib/group-course";
 
 export type StateExamRow = {
   id: string;
@@ -42,9 +43,18 @@ export function TeacherStateExamView({
 
   const specialities = useMemo(() => Array.from(new Set(rows.map((r) => r.groupSpeciality).filter(Boolean))).sort(), [rows]);
   const afterSpec = useMemo(() => speciality ? rows.filter((r) => r.groupSpeciality === speciality) : rows, [rows, speciality]);
-  const courses = useMemo(() => Array.from(new Set(afterSpec.map((r) => String(r.course)))).sort(), [afterSpec]);
-  const afterCourse = useMemo(() => course ? afterSpec.filter((r) => String(r.course) === course) : afterSpec, [afterSpec, course]);
-  const groups = useMemo(() => Array.from(new Set(afterCourse.map((r) => r.groupName))).sort(), [afterCourse]);
+  const courses = useMemo(
+    () => uniqueCoursesFromGroupNames(afterSpec.map((r) => r.groupName)),
+    [afterSpec]
+  );
+  const groups = useMemo(
+    () => filterGroupNamesByCourse(afterSpec.map((r) => r.groupName), course),
+    [afterSpec, course]
+  );
+  const afterCourse = useMemo(
+    () => (course ? afterSpec.filter((r) => groupMatchesCourse(r.groupName, course)) : afterSpec),
+    [afterSpec, course]
+  );
   const afterGroup = useMemo(() => groupName ? afterCourse.filter((r) => r.groupName === groupName) : afterCourse, [afterCourse, groupName]);
   const studentOpts = useMemo(() => {
     const seen = new Set<string>();
@@ -61,7 +71,7 @@ export function TeacherStateExamView({
     const q = search.trim().toLowerCase();
     return rows.filter((r) => {
       if (speciality && r.groupSpeciality !== speciality) return false;
-      if (course && String(r.course) !== course) return false;
+      if (course && !groupMatchesCourse(r.groupName, course)) return false;
       if (groupName && r.groupName !== groupName) return false;
       if (studentId && r.studentId !== studentId) return false;
       if (q) {
@@ -95,8 +105,15 @@ export function TeacherStateExamView({
         <CardContent className="p-4 space-y-3">
           <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
             <Sel label="Специальность" value={speciality} onChange={(v) => { setSpeciality(v); setCourse(""); setGroupName(""); }} options={specialities} />
-            <Sel label="Курс" value={course} onChange={(v) => { setCourse(v); setGroupName(""); }} options={courses} disabled={courses.length === 0} />
-            <Sel label="Группа" value={groupName} onChange={(v) => { setGroupName(v); setStudentId(""); }} options={groups} disabled={groups.length === 0} />
+            <Sel label="Курс" value={course} onChange={(v) => { setCourse(v); setGroupName(""); }} options={courses.map(String)} disabled={courses.length === 0} />
+            <Sel
+              label="Группа"
+              value={groupName}
+              onChange={(v) => { setGroupName(v); setStudentId(""); }}
+              options={groups}
+              disabled={!course || groups.length === 0}
+              emptyLabel={course ? "— все —" : "Сначала курс"}
+            />
             <Sel
               label="Студент"
               value={studentId}
@@ -105,12 +122,7 @@ export function TeacherStateExamView({
               optionsLabels={Object.fromEntries(studentOpts.map((s) => [s.id, s.label]))}
             />
           </div>
-          <div className="flex items-center justify-between gap-2 text-xs">
-            <span className="text-muted-foreground">
-              {hasFilters
-                ? <>Найдено: <span className="font-medium">{filtered.length}</span></>
-                : <>Показаны первые <span className="font-medium">{visible.length}</span> из {rows.length}</>}
-            </span>
+          <div className="flex items-center justify-end gap-2 text-xs">
             <div className="flex gap-2">
               <Button asChild variant="outline" size="sm">
                 <Link href={reportUrl} target="_blank"><Printer className="h-3 w-3 mr-1" />Отчёт</Link>
@@ -170,7 +182,7 @@ export function TeacherStateExamView({
 }
 
 function Sel({
-  label, value, onChange, options, disabled, optionsLabels,
+  label, value, onChange, options, disabled, optionsLabels, emptyLabel = "— все —",
 }: {
   label: string;
   value: string;
@@ -178,13 +190,14 @@ function Sel({
   options: readonly string[];
   disabled?: boolean;
   optionsLabels?: Record<string, string>;
+  emptyLabel?: string;
 }) {
   return (
     <div className="space-y-1">
       <Label className="text-xs uppercase tracking-wide text-muted-foreground">{label}</Label>
       <select value={value} onChange={(e) => onChange(e.target.value)} disabled={disabled}
         className="flex h-9 w-full rounded-md border border-input bg-background px-3 text-sm shadow-sm disabled:opacity-50">
-        <option value="">— все —</option>
+        <option value="">{emptyLabel}</option>
         {options.map((o) => <option key={o} value={o}>{optionsLabels?.[o] ?? o}</option>)}
       </select>
     </div>

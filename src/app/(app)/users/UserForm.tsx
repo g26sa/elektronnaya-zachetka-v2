@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { userSchema, type UserInput } from "@/schemas/user";
 import { createUser, updateUser } from "./actions";
+import { controlledSelectProps } from "@/components/forms/controlled-select";
 
 export function UserForm({
   trigger, id, initial,
@@ -124,7 +125,7 @@ function Sel({ label, options, err, ...rest }: { label: string; options: { id: s
   return (
     <div className="space-y-1.5">
       <Label>{label}</Label>
-      <select {...rest} className="flex h-9 w-full rounded-md border border-input bg-background px-3 text-sm shadow-sm">
+      <select {...controlledSelectProps(rest)} className="flex h-9 w-full rounded-md border border-input bg-background px-3 text-sm shadow-sm">
         {options.map(o => <option key={o.id} value={o.id}>{o.label}</option>)}
       </select>
       {err && <p className="text-xs text-destructive">{err}</p>}

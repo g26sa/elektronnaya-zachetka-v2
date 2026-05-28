@@ -31,7 +31,7 @@ const KIND_META: Record<string, { icon: React.ElementType; label: string }> = {
  * Карточный обзор плана преподавателя. Сгруппирован по типу работы.
  */
 export async function TeacherPlanView({ teacherId }: { teacherId: string }) {
-  const plan = await getTeacherPlanForDisplay(teacherId, { onlyWithActualWork: true });
+  const plan = await getTeacherPlanForDisplay(teacherId);
 
   const byKind = new Map<string, typeof plan>();
   for (const item of plan) {
@@ -44,9 +44,9 @@ export async function TeacherPlanView({ teacherId }: { teacherId: string }) {
     return (
       <Card><CardContent className="p-8 text-center text-muted-foreground space-y-2">
         <ClipboardList className="h-10 w-10 mx-auto opacity-30" />
-        <p>Нет активных направлений для отображения.</p>
+        <p>Нет назначений для отображения.</p>
         <p className="text-xs">
-          Здесь показываются дисциплины, ВКР и практики, по которым уже заведены данные в системе.
+          Здесь отображается ваш план, назначенный заведующим отделением.
         </p>
       </CardContent></Card>
     );

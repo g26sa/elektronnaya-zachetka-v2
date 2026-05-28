@@ -9,7 +9,7 @@ export type RecordBookSemester = {
     id: string;
     discipline: { name: string };
     hours: number | null;
-    creditUnits: number | null;
+
     type: string;
     grade: string;
     date: Date;
@@ -53,7 +53,7 @@ export function RecordBookPage({
             <div className="text-[11px] uppercase tracking-widest text-amber-900/80">
               Зачётная книжка № {recordBookNumber}
             </div>
-            <h2 className="text-lg font-semibold mt-1">Результаты промежуточной аттестации</h2>
+            <h2 className="text-lg font-semibold mt-1">Результаты по дисциплинам</h2>
             <p className="text-sm mt-1">{studentName} · группа {group}</p>
             {headerNote && <p className="text-xs mt-1 text-amber-900/70">{headerNote}</p>}
           </header>
@@ -76,7 +76,7 @@ export function RecordBookPage({
                 <th className="border border-amber-900/60 bg-amber-900/10 px-2 py-2 text-center w-10">№</th>
                 <th className="border border-amber-900/60 bg-amber-900/10 px-2 py-2 text-left">Наименование дисциплины</th>
                 <th className="border border-amber-900/60 bg-amber-900/10 px-2 py-2 text-center w-20">Часы</th>
-                <th className="border border-amber-900/60 bg-amber-900/10 px-2 py-2 text-center w-16">З.е.</th>
+
                 <th className="border border-amber-900/60 bg-amber-900/10 px-2 py-2 text-center w-32">Форма контроля</th>
                 <th className="border border-amber-900/60 bg-amber-900/10 px-2 py-2 text-center w-20">Оценка</th>
                 <th className="border border-amber-900/60 bg-amber-900/10 px-2 py-2 text-center w-28">Дата</th>
@@ -89,7 +89,7 @@ export function RecordBookPage({
                   <td className="border border-amber-900/60 px-2 py-2 text-center">{i + 1}</td>
                   <td className="border border-amber-900/60 px-2 py-2">{a.discipline.name}</td>
                   <td className="border border-amber-900/60 px-2 py-2 text-center">{a.hours ?? "—"}</td>
-                  <td className="border border-amber-900/60 px-2 py-2 text-center">{a.creditUnits ?? "—"}</td>
+
                   <td className="border border-amber-900/60 px-2 py-2 text-center">{assessmentTypeLabel(a.type)}</td>
                   <td className="border border-amber-900/60 px-2 py-2 text-center">
                     <span

@@ -153,7 +153,7 @@ async function StudentDashboard({ userId }: { userId: string }) {
 
       {/* Быстрые ссылки */}
       <div className="grid sm:grid-cols-3 gap-4">
-        <QuickLink href="/attestations" title="Зачётная книжка" hint="Промежуточная аттестация" />
+        <QuickLink href="/attestations" title="Зачётная книжка" hint="Дисциплины" />
         <QuickLink href="/coursework" title="Курсовые работы" hint="Темы и оценки" />
         <QuickLink href="/gia" title="Выпускная квалификационная работа" hint="Тема и защита" />
       </div>
@@ -182,25 +182,21 @@ async function StaffDashboard({ role }: { role: "TEACHER" | "HEAD" }) {
         <StatCard icon={Clock} label="ВКР без защиты" value={openVkr} />
         {role === "HEAD" && <StatCard icon={Users} label="Преподавателей" value={teachers} />}
       </div>
-      <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-        <QuickLink href="/students" title="Студенты" hint="Список и зачётные книжки" />
-        <QuickLink href="/attestations" title="Аттестации" hint="Внести оценки" />
-        {role === "HEAD" ? (
-          <>
-            <QuickLink href="/plan" title="Планы преподавателей" hint="Назначить дисциплины и нагрузку" />
-            <QuickLink href="/groups" title="Группы" hint="Учебные группы" />
-            <QuickLink href="/users" title="Пользователи" hint="Роли и доступ" />
-            <QuickLink href="/institution" title="Учреждение" hint="Реквизиты и логотип" />
-            <QuickLink href="/templates" title="Шаблоны" hint="Печатные формы" />
-          </>
-        ) : (
+      {role === "HEAD" ? (
+        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          <QuickLink href="/plan" title="Планы преподавателей" hint="Назначить дисциплины и нагрузку" />
+          <QuickLink href="/state-exam" title="Государственный экзамен" hint="Допуск, даты и оценки" />
+          <QuickLink href="/groups" title="Группы" hint="Учебные группы" />
+          <QuickLink href="/attestations" title="Дисциплины" hint="Оценки и зачётная книжка" />
+          <QuickLink href="/coursework" title="Курсовые работы" hint="Темы и оценки" />
+          <QuickLink href="/gia" title="ВКР" hint="Темы, допуск и защита" />
+        </div>
+      ) : (
+        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          <QuickLink href="/students" title="Студенты" hint="Список и зачётные книжки" />
+          <QuickLink href="/attestations" title="Дисциплины" hint="Внести оценки" />
           <QuickLink href="/plan" title="Мой план" hint="Ваши дисциплины по семестрам" />
-        )}
-      </div>
-      {role === "HEAD" && (
-        <p className="text-xs text-muted-foreground">
-          Планы преподавателей формируются в разделе «Планы преподавателей» — после назначений преподаватели увидят дисциплины на своей главной.
-        </p>
+        </div>
       )}
     </div>
   );

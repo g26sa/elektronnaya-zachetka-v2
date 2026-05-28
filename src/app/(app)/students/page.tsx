@@ -2,6 +2,7 @@ import { requireRole } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { StudentsExplorer } from "@/components/StudentsExplorer";
 import { getTeacherStudentIds } from "@/lib/teacherPlan";
+import { reactivateEndedAcademicLeaves } from "@/lib/student-academic-leave";
 
 export default async function StudentsPage({
   searchParams,
@@ -17,6 +18,8 @@ export default async function StudentsPage({
     : null;
 
   const isArchived = tab === "archive";
+
+  await reactivateEndedAcademicLeaves();
 
   const students = await prisma.student.findMany({
     where: {

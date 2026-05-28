@@ -21,21 +21,21 @@ const ACADEMIC_ITEMS: Item[] = [
   { href: "/dashboard", label: "Главная", icon: LayoutDashboard, roles: ["STUDENT", "TEACHER", "HEAD"] },
   { href: "/profile", label: "Профиль", icon: User, roles: ["STUDENT", "TEACHER", "HEAD"] },
   { href: "/students", label: "Студенты", icon: Users, roles: ["TEACHER", "HEAD"] },
-  { href: "/attestations", label: "Промежуточная аттестация", icon: ClipboardList, roles: ["STUDENT", "TEACHER", "HEAD"] },
+  { href: "/attestations", label: "Дисциплины", icon: ClipboardList, roles: ["STUDENT", "TEACHER", "HEAD"] },
   { href: "/coursework", label: "Курсовые работы", icon: BookOpen, roles: ["STUDENT", "TEACHER", "HEAD"] },
   { href: "/practice", label: "Практика", icon: Briefcase, roles: ["STUDENT", "TEACHER", "HEAD"] },
   { href: "/gia", label: "ВКР", icon: GraduationCap, roles: ["STUDENT", "TEACHER", "HEAD"] },
   { href: "/defense", label: "Защита ВКР", icon: ScrollText, roles: ["STUDENT", "TEACHER", "HEAD"] },
   { href: "/state-exam", label: "Государственный экзамен", icon: FileBadge, roles: ["STUDENT", "TEACHER", "HEAD"] },
-  { href: "/plan", label: "Планы преподавателей", icon: CalendarRange, roles: ["TEACHER", "HEAD"] },
+  { href: "/plan", label: "Планы преподавателей", icon: CalendarRange, roles: ["HEAD"] },
 ];
 
 const ADMIN_ITEMS: Item[] = [
   { href: "/audit", label: "История изменений", icon: History, roles: ["HEAD"] },
   { href: "/groups", label: "Группы", icon: UsersRound, roles: ["HEAD"] },
+  { href: "/discipline-types", label: "Виды дисциплин", icon: BookOpen, roles: ["HEAD"] },
   { href: "/vkr-types", label: "Виды ВКР", icon: ScrollText, roles: ["HEAD"] },
   { href: "/gek-chairs", label: "Председатели ГЭК", icon: FileBadge, roles: ["HEAD"] },
-  { href: "/templates", label: "Шаблоны отчётов", icon: FileCog, roles: ["HEAD"] },
   { href: "/users", label: "Управление ролями", icon: Users, roles: ["HEAD"] },
   { href: "/institution", label: "Учреждение", icon: Building2, roles: ["HEAD"] },
 ];

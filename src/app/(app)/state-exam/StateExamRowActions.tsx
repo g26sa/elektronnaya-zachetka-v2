@@ -6,10 +6,11 @@ import { deleteStateExam } from "./actions";
 import { Pencil } from "lucide-react";
 
 type Opt = { id: string; label: string };
+type StudentOpt = { id: string; label: string; groupName: string; speciality: string };
 export function StateExamRowActions(props: {
   id: string;
   initial: Parameters<typeof StateExamForm>[0]["initial"];
-  students: Opt[]; chairs: Opt[];
+  students: StudentOpt[]; chairs: Opt[];
   canEdit: boolean;
 }) {
   return (

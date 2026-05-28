@@ -22,7 +22,7 @@ export type AuditAction = (typeof AuditActionValues)[number];
 
 /**
  * Тип записи в плане преподавателя:
- *   ASSESSMENT        — ведёт дисциплину в группе (промежуточная аттестация)
+ *   ASSESSMENT        — ведёт дисциплину в группе
  *   COURSEWORK        — руководит курсовыми по дисциплине в группе
  *   PRACTICE          — руководит практикой группы
  *   VKR               — научный руководитель ВКР конкретного студента
@@ -32,9 +32,13 @@ export type AuditAction = (typeof AuditActionValues)[number];
 export const TeachingKindValues = ["ASSESSMENT", "COURSEWORK", "PRACTICE", "VKR", "DEFENSE_CHAIR", "STATE_EXAM_CHAIR"] as const;
 export type TeachingKind = (typeof TeachingKindValues)[number];
 
+/** Типы для назначения в плане (без председателей ГЭК). */
+export const PlanTeachingKindValues = ["ASSESSMENT", "COURSEWORK", "PRACTICE", "VKR"] as const;
+export type PlanTeachingKind = (typeof PlanTeachingKindValues)[number];
+
 export function teachingKindLabel(k: string): string {
   switch (k) {
-    case "ASSESSMENT": return "Промежуточная аттестация";
+    case "ASSESSMENT": return "Дисциплины";
     case "COURSEWORK": return "Курсовая работа";
     case "PRACTICE": return "Практика";
     case "VKR": return "Руководство ВКР";

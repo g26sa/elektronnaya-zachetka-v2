@@ -10,7 +10,7 @@ export async function createStateExam(input: unknown) {
   const session = await getSession();
   assertCan(session, "stateExam:edit");
   const d = stateExamSchema.parse(input);
-  const created = await prisma.stateExam.create({
+  const created = await (prisma.stateExam.create as Function)({
     data: {
       studentId: d.studentId,
       name: d.name,
@@ -18,7 +18,8 @@ export async function createStateExam(input: unknown) {
       admissionDate: d.admissionDate ? new Date(d.admissionDate) : null,
       date: d.date ? new Date(d.date) : null,
       grade: d.grade ?? null,
-      chairId: d.chairId ?? null,
+      chairGekId: (d as any).chairGekId ?? null,
+      chairId: null,
       protocolNumber: d.protocolNumber ?? null,
     },
   });
@@ -31,7 +32,7 @@ export async function updateStateExam(id: string, input: unknown) {
   assertCan(session, "stateExam:edit");
   const d = stateExamSchema.parse(input);
   const before = await prisma.stateExam.findUnique({ where: { id } });
-  const updated = await prisma.stateExam.update({
+  const updated = await (prisma.stateExam.update as Function)({
     where: { id },
     data: {
       studentId: d.studentId,
@@ -40,7 +41,8 @@ export async function updateStateExam(id: string, input: unknown) {
       admissionDate: d.admissionDate ? new Date(d.admissionDate) : null,
       date: d.date ? new Date(d.date) : null,
       grade: d.grade ?? null,
-      chairId: d.chairId ?? null,
+      chairGekId: (d as any).chairGekId ?? null,
+      chairId: null,
       protocolNumber: d.protocolNumber ?? null,
     },
   });

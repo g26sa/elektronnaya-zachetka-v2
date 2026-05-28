@@ -17,7 +17,7 @@ export async function buildStudentContext(studentId: string) {
         courseWorks: { include: { discipline: true, semester: true, teacher: true }, orderBy: { date: "asc" } },
         practices: { include: { semester: true, instSupervisor: true }, orderBy: { startDate: "asc" } },
         vkr: { include: { supervisor: true, defense: { include: { chair: true } } } },
-        stateExams: { include: { chair: true }, orderBy: { date: "asc" } },
+        stateExams: { include: { chair: true, chairGek: true } as any, orderBy: { date: "asc" } },
       },
     }),
   ]);
@@ -110,7 +110,7 @@ export async function buildStudentContext(studentId: string) {
       admissionDate: formatDate(e.admissionDate),
       date: formatDate(e.date),
       grade: e.grade ?? "",
-      chair: e.chair?.fullName ?? "",
+      chair: (e as any).chairGek?.fullName ?? e.chair?.fullName ?? "",
       protocolNumber: e.protocolNumber ?? "",
     })),
   };

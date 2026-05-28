@@ -12,6 +12,12 @@ import { TeacherCourseworkView, type CourseworkRow } from "./TeacherCourseworkVi
 import { formatDate, gradeIsPassing } from "@/lib/utils";
 import { Plus, Printer } from "lucide-react";
 import Link from "next/link";
+import {
+  filterGroupNamesByCourse,
+  filterItemsByGroupCourse,
+  uniqueCoursesFromGroupNames,
+} from "@/lib/group-course";
+import { AutoFilterForm } from "@/components/filters/AutoFilterForm";
 
 export default async function CourseWorkPage({
   searchParams,
@@ -66,7 +72,7 @@ export default async function CourseWorkPage({
   // Каскадные фильтры студентов
   let filteredStudents = allStudents;
   if (params.speciality) filteredStudents = filteredStudents.filter((s) => s.group.speciality === params.speciality);
-  if (params.course) filteredStudents = filteredStudents.filter((s) => String(s.currentCourse) === params.course);
+  if (params.course) filteredStudents = filterItemsByGroupCourse(filteredStudents, params.course);
   if (params.group) filteredStudents = filteredStudents.filter((s) => s.group.name === params.group);
 
   const oS = allStudents.map((s) => ({ id: s.id, label: `${s.user.fullName} (${s.group.name})` }));
@@ -75,8 +81,13 @@ export default async function CourseWorkPage({
   const oT = teachers.map((t) => ({ id: t.id, label: t.fullName }));
 
   const specialities = Array.from(new Set(allStudents.map((s) => s.group.speciality).filter(Boolean) as string[])).sort();
-  const courses = Array.from(new Set(allStudents.map((s) => s.currentCourse))).sort((a, b) => a - b);
-  const groups = Array.from(new Set(filteredStudents.map((s) => s.group.name))).sort();
+  const courses = uniqueCoursesFromGroupNames(allStudents.map((s) => s.group.name));
+  const groups = params.course
+    ? filterGroupNamesByCourse(
+        (params.speciality ? filteredStudents : allStudents).map((s) => s.group.name),
+        params.course
+      )
+    : [];
   const semesterNums = [1, 2];
 
   const filteredStudentIds = filteredStudents.map((s) => s.id);
@@ -119,17 +130,22 @@ export default async function CourseWorkPage({
   if (params.dateFrom) reportParams.set("dateFrom", params.dateFrom);
   if (params.dateTo) reportParams.set("dateTo", params.dateTo);
 
+  const reportHref =
+    isStudent && studentId
+      ? `/print/coursework/${studentId}`
+      : `/print/coursework-report?${reportParams.toString()}`;
+
   return (
     <div className="space-y-6">
       <div className="flex items-end justify-between gap-4 flex-wrap">
         <h1 className="text-2xl font-semibold">Курсовые работы</h1>
         <div className="flex gap-2">
           <Button asChild variant="outline" size="sm">
-            <Link href={`/print/coursework-report?${reportParams.toString()}`} target="_blank">
+            <Link href={reportHref} target="_blank">
               <Printer className="h-4 w-4 mr-2" />Отчёт
             </Link>
           </Button>
-          {can(session, "courseWork:create") && (
+          {session.role === "TEACHER" && can(session, "courseWork:create") && (
             <CourseWorkForm
               students={oS} semesters={oSem} disciplines={oD} teachers={oT}
               lockTeacher={false}
@@ -144,10 +160,17 @@ export default async function CourseWorkPage({
         <Card>
           <CardHeader className="pb-3"><CardTitle className="text-base">Фильтры</CardTitle></CardHeader>
           <CardContent>
-            <form className="grid sm:grid-cols-3 gap-3" action="/coursework" method="get">
+            <AutoFilterForm action="/coursework" className="grid sm:grid-cols-3 gap-3">
               <Sel name="speciality" label="Специальность" value={params.speciality ?? ""} opts={specialities.map((s) => ({ v: s, l: s }))} />
               <Sel name="course" label="Курс" value={params.course ?? ""} opts={courses.map((c) => ({ v: String(c), l: String(c) }))} />
-              <Sel name="group" label="Группа" value={params.group ?? ""} opts={groups.map((g) => ({ v: g, l: g }))} />
+              <Sel
+                name="group"
+                label="Группа"
+                value={params.group ?? ""}
+                opts={groups.map((g) => ({ v: g, l: g }))}
+                disabled={!params.course}
+                emptyLabel={params.course ? "— все —" : "Сначала курс"}
+              />
               <Sel name="studentId" label="Студент" value={studentId ?? ""} opts={filteredStudents.map((s) => ({ v: s.id, l: `${s.user.fullName} (${s.group.name})` }))} />
               <Sel name="semester" label="Семестр" value={params.semester ?? ""} opts={semesterNums.map((n) => ({ v: String(n), l: `${n} семестр` }))} />
               <Sel name="discipline" label="Дисциплина" value={params.discipline ?? ""} opts={disciplines.map((d) => ({ v: d.name, l: d.name }))} />
@@ -160,13 +183,9 @@ export default async function CourseWorkPage({
                 <input type="date" name="dateTo" defaultValue={params.dateTo ?? ""} className="flex h-9 w-full rounded-md border border-input bg-background px-3 text-sm shadow-sm" />
               </div>
               <div className="flex gap-2 items-end sm:col-span-3">
-                <Button type="submit" variant="outline" size="sm">Применить</Button>
                 {hasFilters && <Button type="button" variant="ghost" size="sm" asChild><Link href="/coursework">Сбросить</Link></Button>}
-                <span className="text-xs text-muted-foreground self-center ml-2">
-                  {hasFilters ? `Найдено: ${items.length}` : `Последние 10 из всех`}
-                </span>
               </div>
-            </form>
+            </AutoFilterForm>
           </CardContent>
         </Card>
       )}
@@ -298,12 +317,26 @@ async function TeacherFlow({
   );
 }
 
-function Sel({ name, label, value, opts }: { name: string; label: string; value: string; opts: { v: string; l: string }[] }) {
+function Sel({
+  name, label, value, opts, disabled, emptyLabel = "— все —",
+}: {
+  name: string;
+  label: string;
+  value: string;
+  opts: { v: string; l: string }[];
+  disabled?: boolean;
+  emptyLabel?: string;
+}) {
   return (
     <div className="space-y-1">
       <label className="text-xs uppercase tracking-wide text-muted-foreground block">{label}</label>
-      <select name={name} defaultValue={value} className="flex h-9 w-full rounded-md border border-input bg-background px-3 text-sm shadow-sm">
-        <option value="">— все —</option>
+      <select
+        name={name}
+        defaultValue={value}
+        disabled={disabled}
+        className="flex h-9 w-full rounded-md border border-input bg-background px-3 text-sm shadow-sm disabled:opacity-50"
+      >
+        <option value="">{emptyLabel}</option>
         {opts.map((o) => <option key={o.v} value={o.v}>{o.l}</option>)}
       </select>
     </div>

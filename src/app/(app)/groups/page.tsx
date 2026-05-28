@@ -7,7 +7,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { GroupRowActions } from "./GroupRowActions";
 import { GroupImportDialog } from "./GroupImportDialog";
 import { GroupsFilterClient } from "./GroupsFilterClient";
-import { Users } from "lucide-react";
+import { GroupForm } from "./GroupForm";
+import { Users, Plus } from "lucide-react";
 
 export default async function GroupsPage({
   searchParams,
@@ -36,8 +37,16 @@ export default async function GroupsPage({
 
   return (
     <div className="space-y-4">
-      <div>
+      <div className="flex items-center justify-between gap-4">
         <h1 className="text-2xl font-semibold">Группы</h1>
+        <GroupForm
+          specialities={specialities}
+          trigger={
+            <Button>
+              <Plus className="h-4 w-4 mr-2" />Новая группа
+            </Button>
+          }
+        />
       </div>
 
       <GroupsFilterClient

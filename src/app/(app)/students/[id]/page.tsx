@@ -5,11 +5,14 @@ import { prisma } from "@/lib/db";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { StudentProfileForm } from "./StudentProfileForm";
 import { ChevronLeft } from "lucide-react";
+import { reactivateEndedAcademicLeaves } from "@/lib/student-academic-leave";
 
 export default async function StudentProfileEditPage({ params }: { params: Promise<{ id: string }> }) {
   // Только заведующий может править чужие профили целиком.
   await requireRole("HEAD");
   const { id } = await params;
+
+  await reactivateEndedAcademicLeaves();
 
   const [student, groups] = await Promise.all([
     prisma.student.findUnique({
@@ -33,6 +36,7 @@ export default async function StudentProfileEditPage({ params }: { params: Promi
         <CardHeader><CardTitle className="text-base">Данные студента</CardTitle></CardHeader>
         <CardContent>
           <StudentProfileForm
+            key={student.id}
             studentId={student.id}
             groups={groups.map((g) => ({ id: g.id, label: `${g.name}${g.speciality ? " · " + g.speciality : ""}` }))}
             initial={{
@@ -48,6 +52,9 @@ export default async function StudentProfileEditPage({ params }: { params: Promi
               expulsionDate: student.expulsionDate ? student.expulsionDate.toISOString().slice(0, 10) : "",
               expulsionOrder: student.expulsionOrder ?? "",
               academicLeaveDate: student.academicLeaveDate ? student.academicLeaveDate.toISOString().slice(0, 10) : "",
+              academicLeaveEndDate: student.academicLeaveEndDate
+                ? student.academicLeaveEndDate.toISOString().slice(0, 10)
+                : "",
               academicLeaveOrder: student.academicLeaveOrder ?? "",
               currentCourse: student.currentCourse,
             }}

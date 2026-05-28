@@ -2,16 +2,15 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireRole } from "@/lib/auth";
 import { prisma } from "@/lib/db";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { LiveTableFilter } from "@/components/LiveTableFilter";
-import { TableFiltersBar } from "@/components/TableFiltersBar";
 import { TableSortEnhancer } from "@/components/TableSortEnhancer";
-import { QuickAddForm } from "./QuickAddForm";
+import { PlanAssessmentsFilters } from "./PlanAssessmentsFilters";
+import { AssessmentStudentForm } from "./AssessmentStudentForm";
 import { assessmentTypeLabel, formatDate, gradeIsPassing } from "@/lib/utils";
-import { ChevronLeft, Plus, Printer } from "lucide-react";
+import { ChevronLeft, Printer, Pencil } from "lucide-react";
 
 export default async function AttestationByPlanPage({ params }: { params: Promise<{ planId: string }> }) {
   const session = await requireRole("TEACHER", "HEAD");
@@ -23,7 +22,14 @@ export default async function AttestationByPlanPage({ params }: { params: Promis
       teacher: { select: { id: true, fullName: true } },
       discipline: true,
       semester: true,
-      group: { include: { students: { include: { user: true } } } },
+      group: {
+        include: {
+          students: {
+            include: { user: true },
+            orderBy: { user: { fullName: "asc" } },
+          },
+        },
+      },
     },
   });
   if (!plan) notFound();
@@ -33,7 +39,6 @@ export default async function AttestationByPlanPage({ params }: { params: Promis
   }
   if (!plan.discipline || !plan.semester || !plan.group) notFound();
 
-  // Все оценки этого преподавателя по этой дисциплине, семестру и группе плана
   const records = await prisma.assessment.findMany({
     where: {
       teacherId: plan.teacherId,
@@ -41,13 +46,15 @@ export default async function AttestationByPlanPage({ params }: { params: Promis
       semesterId: plan.semesterId!,
       student: { groupId: plan.groupId! },
     },
-    include: { student: { include: { user: true } } },
     orderBy: { date: "desc" },
   });
 
-  const students = plan.group.students
-    .map((s) => ({ id: s.id, label: s.user.fullName }))
-    .sort((a, b) => a.label.localeCompare(b.label, "ru"));
+  const assessmentByStudent = new Map<string, (typeof records)[0]>();
+  for (const r of records) {
+    if (!assessmentByStudent.has(r.studentId)) {
+      assessmentByStudent.set(r.studentId, r);
+    }
+  }
 
   const printUrl = `/print/plan/${plan.id}`;
 
@@ -65,33 +72,19 @@ export default async function AttestationByPlanPage({ params }: { params: Promis
             {plan.hours != null && <span>· {plan.hours} ч.</span>}
             {plan.group.speciality && <span className="truncate">· {plan.group.speciality}</span>}
           </div>
+          <p className="text-xs text-muted-foreground mt-1">
+            Студентов в группе: {plan.group.students.length}. Оценки выставляются индивидуально.
+          </p>
         </div>
-        <div className="flex gap-2">
-          <Button asChild variant="outline">
-            <Link href={printUrl} target="_blank">
-              <Printer className="h-4 w-4 mr-2" />
-              Отчёт
-            </Link>
-          </Button>
-          <QuickAddForm
-            planId={plan.id}
-            students={students}
-            trigger={<Button><Plus className="h-4 w-4 mr-2" />Добавить</Button>}
-          />
-        </div>
+        <Button asChild variant="outline">
+          <Link href={printUrl} target="_blank">
+            <Printer className="h-4 w-4 mr-2" />
+            Отчёт
+          </Link>
+        </Button>
       </div>
 
-      <TableFiltersBar
-        targetSelector='table[data-search="plan-assessments"] tbody tr'
-        filters={[
-          { key: "student", label: "Студент" },
-          { key: "type", label: "Форма контроля" },
-        ]}
-      />
-      <LiveTableFilter
-        targetSelector='table[data-search="plan-assessments"] tbody tr'
-        placeholder="Поиск по студенту, оценке, дате…"
-      />
+      <PlanAssessmentsFilters targetSelector='table[data-search="plan-assessments"] tbody tr' />
       <TableSortEnhancer targetSelector='table[data-search="plan-assessments"]' />
 
       <Card>
@@ -103,30 +96,70 @@ export default async function AttestationByPlanPage({ params }: { params: Promis
                 <TableHead data-sort="text">Форма контроля</TableHead>
                 <TableHead data-sort="text">Оценка</TableHead>
                 <TableHead data-sort="date">Дата</TableHead>
+                <TableHead className="text-right w-[80px]">Действия</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {records.length === 0 ? (
+              {plan.group.students.length === 0 ? (
                 <TableRow data-empty="1">
-                  <TableCell colSpan={4} className="text-center text-muted-foreground py-10">
-                    По этой дисциплине пока нет выставленных оценок.
+                  <TableCell colSpan={5} className="text-center text-muted-foreground py-10">
+                    В группе нет студентов.
                   </TableCell>
                 </TableRow>
-              ) : records.map((r) => (
-                <TableRow key={r.id} data-student={r.student.user.fullName} data-type={assessmentTypeLabel(r.type)}>
-                  <TableCell>{r.student.user.fullName}</TableCell>
-                  <TableCell>{assessmentTypeLabel(r.type)}</TableCell>
-                  <TableCell>
-                    <Badge variant={gradeIsPassing(r.grade) ? "success" : "destructive"}>{r.grade}</Badge>
-                  </TableCell>
-                  <TableCell className="whitespace-nowrap">{formatDate(r.date)}</TableCell>
-                </TableRow>
-              ))}
+              ) : (
+                plan.group.students.map((s) => {
+                  const a = assessmentByStudent.get(s.id);
+                  return (
+                    <TableRow
+                      key={s.id}
+                      data-grade={a ? a.grade : "нет оценки"}
+                      data-date={a ? a.date.toISOString().slice(0, 10) : ""}
+                    >
+                      <TableCell className="font-medium">{s.user.fullName}</TableCell>
+                      <TableCell>
+                        {a ? assessmentTypeLabel(a.type) : <span className="text-muted-foreground">—</span>}
+                      </TableCell>
+                      <TableCell>
+                        {a ? (
+                          <Badge variant={gradeIsPassing(a.grade) ? "success" : "destructive"}>{a.grade}</Badge>
+                        ) : (
+                          <Badge variant="outline">не выставлена</Badge>
+                        )}
+                      </TableCell>
+                      <TableCell className="whitespace-nowrap">
+                        {a ? formatDate(a.date) : <span className="text-muted-foreground">—</span>}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <AssessmentStudentForm
+                          planId={plan.id}
+                          studentId={s.id}
+                          studentName={s.user.fullName}
+                          controlForm={(plan as any).controlForm ?? undefined}
+                          initial={
+                            a
+                              ? {
+                                  assessmentId: a.id,
+                                  type: a.type as "EXAM" | "CREDIT" | "GRADED_CREDIT",
+                                  grade: a.grade,
+                                  date: a.date.toISOString().slice(0, 10),
+                                }
+                              : undefined
+                          }
+                          trigger={
+                            <Button variant="ghost" size="icon" title={a ? "Редактировать оценку" : "Выставить оценку"}>
+                              <Pencil className="h-4 w-4" />
+                            </Button>
+                          }
+                        />
+                      </TableCell>
+                    </TableRow>
+                  );
+                })
+              )}
             </TableBody>
           </Table>
         </CardContent>
       </Card>
-
     </div>
   );
 }

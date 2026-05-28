@@ -92,6 +92,7 @@ function dedupeKey(it: TeacherPlanItem): string {
  * На главной преподавателя показываем только то, что уже заведено.
  */
 export type ActualWorkKeys = {
+  assessmentKeys: Set<string>;
   vkrStudentIds: Set<string>;
   practiceGroupSem: Set<string>;
   courseworkKeys: Set<string>;
@@ -100,7 +101,11 @@ export type ActualWorkKeys = {
 };
 
 export async function loadActualWorkKeys(teacherId: string): Promise<ActualWorkKeys> {
-  const [vkrs, practices, courseWorks, defenses, stateExams] = await Promise.all([
+  const [assessments, vkrs, practices, courseWorks, defenses, stateExams] = await Promise.all([
+    prisma.assessment.findMany({
+      where: { teacherId },
+      select: { disciplineId: true, semesterId: true, student: { select: { groupId: true } } },
+    }),
     prisma.vKR.findMany({
       where: { supervisorId: teacherId },
       select: { studentId: true },
@@ -114,8 +119,23 @@ export async function loadActualWorkKeys(teacherId: string): Promise<ActualWorkK
       select: { disciplineId: true, semesterId: true, student: { select: { groupId: true } } },
     }),
     prisma.defense.findMany({
-      where: { chairId: teacherId },
-      select: { vkr: { select: { studentId: true } } },
+      where: { admission: "ADMITTED" },
+      select: {
+        vkr: {
+          select: {
+            studentId: true,
+            supervisorId: true,
+            student: {
+              select: {
+                teachingAssignments: {
+                  where: { teacherId, kind: "DEFENSE_CHAIR" },
+                  select: { id: true },
+                },
+              },
+            },
+          },
+        },
+      },
     }),
     prisma.stateExam.findMany({
       where: { chairId: teacherId },
@@ -124,6 +144,11 @@ export async function loadActualWorkKeys(teacherId: string): Promise<ActualWorkK
   ]);
 
   return {
+    assessmentKeys: new Set(
+      assessments.map(
+        (a) => `${a.disciplineId}:${a.semesterId}:${a.student.groupId}`
+      )
+    ),
     vkrStudentIds: new Set(vkrs.map((v) => v.studentId)),
     practiceGroupSem: new Set(
       practices.map((p) => `${p.student.groupId}:${p.semesterId}`)
@@ -133,7 +158,15 @@ export async function loadActualWorkKeys(teacherId: string): Promise<ActualWorkK
         (c) => `${c.disciplineId}:${c.semesterId}:${c.student.groupId}`
       )
     ),
-    defenseStudentIds: new Set(defenses.map((d) => d.vkr.studentId)),
+    defenseStudentIds: new Set(
+      defenses
+        .filter(
+          (d) =>
+            d.vkr.supervisorId === teacherId ||
+            d.vkr.student.teachingAssignments.length > 0
+        )
+        .map((d) => d.vkr.studentId)
+    ),
     stateExamStudentIds: new Set(stateExams.map((s) => s.studentId)),
   };
 }
@@ -145,7 +178,14 @@ export function planItemHasActualWork(
 ): boolean {
   switch (it.kind) {
     case "ASSESSMENT":
-      return true;
+      return (
+        !!it.disciplineId &&
+        !!it.semesterId &&
+        !!it.groupId &&
+        keys.assessmentKeys.has(
+          `${it.disciplineId}:${it.semesterId}:${it.groupId}`
+        )
+      );
     case "VKR":
       return !!it.studentId && keys.vkrStudentIds.has(it.studentId);
     case "PRACTICE":

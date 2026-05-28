@@ -2,7 +2,7 @@
 
 import { useMemo, useState, useTransition } from "react";
 import Link from "next/link";
-import { useForm } from "react-hook-form";
+import { useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { Card, CardContent } from "@/components/ui/card";
@@ -14,9 +14,12 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { GradeSelect } from "@/components/forms/GradeSelect";
 import { saveDefenseQuick } from "./actions-quick";
-import { admissionLabel, formatDate, gradeIsPassing } from "@/lib/utils";
-import { Plus, X, Printer, Pencil, Search } from "lucide-react";
+import { formatDate, gradeIsPassing } from "@/lib/utils";
+import { useRouter } from "next/navigation";
+import { X, Printer, Pencil, Search } from "lucide-react";
 import type { TeacherListFilters } from "@/lib/teacher-plan-display";
+import { filterGroupNamesByCourse, groupMatchesCourse, uniqueCoursesFromGroupNames } from "@/lib/group-course";
+import { bindSelect } from "@/lib/rhf-select";
 
 export type DefenseRow = {
   studentId: string;
@@ -49,9 +52,18 @@ export function TeacherDefenseView({
 
   const specialities = useMemo(() => Array.from(new Set(rows.map((r) => r.groupSpeciality).filter(Boolean))).sort(), [rows]);
   const afterSpec = useMemo(() => speciality ? rows.filter((r) => r.groupSpeciality === speciality) : rows, [rows, speciality]);
-  const courses = useMemo(() => Array.from(new Set(afterSpec.map((r) => String(r.course)))).sort(), [afterSpec]);
-  const afterCourse = useMemo(() => course ? afterSpec.filter((r) => String(r.course) === course) : afterSpec, [afterSpec, course]);
-  const groups = useMemo(() => Array.from(new Set(afterCourse.map((r) => r.groupName))).sort(), [afterCourse]);
+  const courses = useMemo(
+    () => uniqueCoursesFromGroupNames(afterSpec.map((r) => r.groupName)),
+    [afterSpec]
+  );
+  const groups = useMemo(
+    () => filterGroupNamesByCourse(afterSpec.map((r) => r.groupName), course),
+    [afterSpec, course]
+  );
+  const afterCourse = useMemo(
+    () => (course ? afterSpec.filter((r) => groupMatchesCourse(r.groupName, course)) : afterSpec),
+    [afterSpec, course]
+  );
   const afterGroup = useMemo(() => groupName ? afterCourse.filter((r) => r.groupName === groupName) : afterCourse, [afterCourse, groupName]);
   const studentOpts = useMemo(() => afterGroup.map((r) => ({ id: r.studentId, label: r.studentName })), [afterGroup]);
 
@@ -59,7 +71,7 @@ export function TeacherDefenseView({
     const q = search.trim().toLowerCase();
     return rows.filter((r) => {
       if (speciality && r.groupSpeciality !== speciality) return false;
-      if (course && String(r.course) !== course) return false;
+      if (course && !groupMatchesCourse(r.groupName, course)) return false;
       if (groupName && r.groupName !== groupName) return false;
       if (studentId && r.studentId !== studentId) return false;
       if (q) {
@@ -93,8 +105,15 @@ export function TeacherDefenseView({
         <CardContent className="p-4 space-y-3">
           <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
             <Sel label="Специальность" value={speciality} onChange={(v) => { setSpeciality(v); setCourse(""); setGroupName(""); }} options={specialities} />
-            <Sel label="Курс" value={course} onChange={(v) => { setCourse(v); setGroupName(""); }} options={courses} disabled={courses.length === 0} />
-            <Sel label="Группа" value={groupName} onChange={(v) => { setGroupName(v); setStudentId(""); }} options={groups} disabled={groups.length === 0} />
+            <Sel label="Курс" value={course} onChange={(v) => { setCourse(v); setGroupName(""); }} options={courses.map(String)} disabled={courses.length === 0} />
+            <Sel
+              label="Группа"
+              value={groupName}
+              onChange={(v) => { setGroupName(v); setStudentId(""); }}
+              options={groups}
+              disabled={!course || groups.length === 0}
+              emptyLabel={course ? "— все —" : "Сначала курс"}
+            />
             <Sel
               label="Студент"
               value={studentId}
@@ -103,12 +122,7 @@ export function TeacherDefenseView({
               optionsLabels={Object.fromEntries(studentOpts.map((s) => [s.id, s.label]))}
             />
           </div>
-          <div className="flex items-center justify-between gap-2 text-xs">
-            <span className="text-muted-foreground">
-              {hasFilters
-                ? <>Найдено: <span className="font-medium">{filtered.length}</span></>
-                : <>Показаны первые <span className="font-medium">{visible.length}</span> из {rows.length}</>}
-            </span>
+          <div className="flex items-center justify-end gap-2 text-xs">
             <div className="flex gap-2">
               <Button asChild variant="outline" size="sm">
                 <Link href={reportUrl} target="_blank"><Printer className="h-3 w-3 mr-1" />Отчёт</Link>
@@ -132,7 +146,7 @@ export function TeacherDefenseView({
                 <TableHead>Группа</TableHead>
                 <TableHead>Курс</TableHead>
                 <TableHead>Тема ВКР</TableHead>
-                <TableHead>Допуск</TableHead>
+                <TableHead>Дата допуска</TableHead>
                 <TableHead>Дата защиты</TableHead>
                 <TableHead>Оценка</TableHead>
                 <TableHead>Председатель ГЭК</TableHead>
@@ -142,7 +156,9 @@ export function TeacherDefenseView({
             <TableBody>
               {visible.length === 0 ? (
                 <TableRow><TableCell colSpan={9} className="text-center text-muted-foreground py-8">
-                  {hasFilters ? "По выбранным фильтрам ничего не найдено." : "Студентов для защиты ВКР пока нет."}
+                  {hasFilters
+                    ? "По выбранным фильтрам ничего не найдено."
+                    : "Нет допущенных к защите. Укажите допуск во вкладке «ВКР»."}
                 </TableCell></TableRow>
               ) : visible.map((r) => (
                 <TableRow key={r.studentId}>
@@ -152,11 +168,7 @@ export function TeacherDefenseView({
                   <TableCell className="max-w-[260px]">
                     {r.vkrTopic ?? <Badge variant="outline">тема не назначена</Badge>}
                   </TableCell>
-                  <TableCell>
-                    {r.admission
-                      ? <Badge variant={r.admission === "ADMITTED" ? "success" : "destructive"}>{admissionLabel(r.admission)}</Badge>
-                      : <Badge variant="outline">—</Badge>}
-                  </TableCell>
+                  <TableCell className="whitespace-nowrap">{formatDate(r.admissionDate)}</TableCell>
                   <TableCell className="whitespace-nowrap">{formatDate(r.date)}</TableCell>
                   <TableCell>
                     {r.grade
@@ -171,16 +183,17 @@ export function TeacherDefenseView({
                         studentId: r.studentId,
                         studentName: r.studentName,
                         vkrTopic: r.vkrTopic,
-                        admission: (r.admission as "ADMITTED" | "NOT_ADMITTED" | null) ?? "ADMITTED",
-                        admissionDate: r.admissionDate ? new Date(r.admissionDate).toISOString().slice(0, 10) : "",
+                        admissionDate: r.admissionDate
+                          ? new Date(r.admissionDate).toISOString().slice(0, 10)
+                          : "",
                         date: r.date ? new Date(r.date).toISOString().slice(0, 10) : "",
                         grade: r.grade ?? "",
                         chairName: r.chairName ?? "",
                       }}
                       trigger={
-                        r.admission
-                          ? <Button variant="ghost" size="icon" title="Редактировать"><Pencil className="h-4 w-4" /></Button>
-                          : <Button variant="outline" size="sm"><Plus className="h-3 w-3 mr-1" />Создать</Button>
+                        <Button variant="ghost" size="icon" title="Редактировать защиту">
+                          <Pencil className="h-4 w-4" />
+                        </Button>
                       }
                     />
                   </TableCell>
@@ -198,8 +211,6 @@ export function TeacherDefenseView({
 
 const formSchema = z.object({
   studentId: z.string().min(1),
-  admission: z.enum(["ADMITTED", "NOT_ADMITTED"]),
-  admissionDate: z.string().optional(),
   date: z.string().optional(),
   grade: z.string().optional(),
   chairName: z.string().optional(),
@@ -210,24 +221,33 @@ function DefenseForm({
   trigger, initial, chairs,
 }: {
   trigger: React.ReactNode;
-  initial: { studentId: string; studentName: string; vkrTopic: string | null; admission: "ADMITTED" | "NOT_ADMITTED"; admissionDate: string; date: string; grade: string; chairName: string };
+  initial: {
+    studentId: string;
+    studentName: string;
+    vkrTopic: string | null;
+    admissionDate: string;
+    date: string;
+    grade: string;
+    chairName: string;
+  };
   chairs: { id: string; fullName: string }[];
 }) {
+  const router = useRouter();
   const [open, setOpen] = useState(false);
   const [pending, startTransition] = useTransition();
   const [err, setErr] = useState<string | null>(null);
 
-  const { register, handleSubmit, formState: { errors } } = useForm<FormInput>({
+  const { register, handleSubmit, control, formState: { errors } } = useForm<FormInput>({
     resolver: zodResolver(formSchema),
     defaultValues: {
       studentId: initial.studentId,
-      admission: initial.admission,
-      admissionDate: initial.admissionDate,
-      date: initial.date,
-      grade: initial.grade,
-      chairName: initial.chairName,
+      date: initial.date ?? "",
+      grade: initial.grade ?? "",
+      chairName: initial.chairName ?? "",
     },
   });
+
+  const chairNameVal = useWatch({ control, name: "chairName" }) ?? "";
 
   const submit = handleSubmit((values) => {
     setErr(null);
@@ -235,6 +255,7 @@ function DefenseForm({
       try {
         await saveDefenseQuick(values);
         setOpen(false);
+        router.refresh();
       } catch (e) {
         setErr(e instanceof Error ? e.message : "Ошибка");
       }
@@ -259,15 +280,14 @@ function DefenseForm({
             </div>
           )}
           <div className="space-y-1.5">
-            <Label>Допуск</Label>
-            <select {...register("admission")} className="flex h-9 w-full rounded-md border border-input bg-background px-3 text-sm shadow-sm">
-              <option value="ADMITTED">Допущен</option>
-              <option value="NOT_ADMITTED">Не допущен</option>
-            </select>
-          </div>
-          <div className="space-y-1.5">
             <Label>Дата допуска</Label>
-            <Input type="date" {...register("admissionDate")} />
+            <Input
+              type="date"
+              value={initial.admissionDate}
+              readOnly
+              className="bg-muted"
+              title="Задаётся автоматически при допуске во вкладке «ВКР»"
+            />
           </div>
           <div className="space-y-1.5">
             <Label>Дата защиты</Label>
@@ -276,7 +296,7 @@ function DefenseForm({
           <GradeSelect label="Оценка" {...register("grade")} err={errors.grade?.message} includePass={false} />
           <div className="space-y-1.5 sm:col-span-2">
             <Label>Председатель ГЭК</Label>
-            <select {...register("chairName")} className="flex h-9 w-full rounded-md border border-input bg-background px-3 text-sm shadow-sm">
+            <select {...bindSelect(register("chairName"), chairNameVal)} className="flex h-9 w-full rounded-md border border-input bg-background px-3 text-sm shadow-sm">
               <option value="">— не выбрано —</option>
               {chairs.map((c) => <option key={c.id} value={c.fullName}>{c.fullName}</option>)}
             </select>
@@ -295,7 +315,7 @@ function DefenseForm({
 }
 
 function Sel({
-  label, value, onChange, options, disabled, optionsLabels,
+  label, value, onChange, options, disabled, optionsLabels, emptyLabel = "— все —",
 }: {
   label: string;
   value: string;
@@ -303,13 +323,14 @@ function Sel({
   options: readonly string[];
   disabled?: boolean;
   optionsLabels?: Record<string, string>;
+  emptyLabel?: string;
 }) {
   return (
     <div className="space-y-1">
       <Label className="text-xs uppercase tracking-wide text-muted-foreground">{label}</Label>
       <select value={value} onChange={(e) => onChange(e.target.value)} disabled={disabled}
         className="flex h-9 w-full rounded-md border border-input bg-background px-3 text-sm shadow-sm disabled:opacity-50">
-        <option value="">— все —</option>
+        <option value="">{emptyLabel}</option>
         {options.map((o) => <option key={o} value={o}>{optionsLabels?.[o] ?? o}</option>)}
       </select>
     </div>

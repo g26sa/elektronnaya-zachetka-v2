@@ -154,11 +154,6 @@ export function GroupImportDialog({ groupId, groupName }: { groupId: string; gro
 
             <p className="text-xs text-muted-foreground">
               Найдено в файле: <strong>{result.total}</strong> студентов
-              {result.parsedNames && result.parsedNames.length > 0 && (
-                <span className="block mt-1 text-[11px] leading-relaxed">
-                  {result.parsedNames.join(" · ")}
-                </span>
-              )}
             </p>
 
             {result.incomplete && result.warning && (

@@ -1,8 +1,9 @@
 import { requireRole } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { PrintBar } from "@/components/documents/PrintBar";
-import { DocumentHeader, DocumentSignatures } from "@/components/documents/DocumentHeader";
+import { DocumentHeader, TeacherReportFooter } from "@/components/documents/DocumentHeader";
 import { formatDate, assessmentTypeLabel } from "@/lib/utils";
+import { groupMatchesCourse } from "@/lib/group-course";
 
 export default async function AttestationReportPage({
   searchParams,
@@ -41,7 +42,7 @@ export default async function AttestationReportPage({
 
   const filtered = assessments.filter((a) => {
     if (sp.speciality && (a.student.group.speciality ?? "") !== sp.speciality) return false;
-    if (sp.course && String(a.student.currentCourse) !== sp.course) return false;
+    if (sp.course && !groupMatchesCourse(a.student.group.name, sp.course)) return false;
     if (sp.group && a.student.group.name !== sp.group) return false;
     return true;
   });
@@ -51,32 +52,34 @@ export default async function AttestationReportPage({
   if (sp.group) titleParts.push(`гр. ${sp.group}`);
   if (sp.discipline) titleParts.push(sp.discipline);
 
+  const pdfFilename = ["Дисциплины", ...titleParts].join(" — ");
+
   return (
     <>
-      <PrintBar />
-      <div className="document p-[24mm]">
+      <PrintBar filename={pdfFilename} />
+      <div className="document p-[15mm_20mm]">
         <DocumentHeader
           institution={institution}
-          title="Промежуточная аттестация"
+          title="Дисциплины"
           subtitle={titleParts.length > 0 ? titleParts.join(" · ") : undefined}
           generatedAt={new Date()}
+          showDateInHeader={false}
         />
 
         {filtered.length === 0 ? (
           <p className="text-center italic">По заданным фильтрам записей нет.</p>
         ) : (
-          <table style={{ fontSize: "10pt" }}>
+          <table>
             <thead>
               <tr>
-                <th style={{ width: "3%" }}>№</th>
-                <th>Студент</th>
-                <th>Группа</th>
-                <th>Курс / Сем.</th>
-                <th>Дисциплина</th>
-                <th>Тип</th>
-                <th>Оценка</th>
-                <th>Дата</th>
-                <th>Преподаватель</th>
+                <th style={{ width: "4%" }}>№</th>
+                <th style={{ width: "22%" }}>Студент</th>
+                <th style={{ width: "8%" }}>Группа</th>
+                <th style={{ width: "8%" }}>Сем.</th>
+                <th style={{ width: "22%" }}>Дисциплина</th>
+                <th style={{ width: "10%" }}>Тип</th>
+                <th style={{ width: "10%" }}>Оценка</th>
+                <th style={{ width: "10%" }}>Дата</th>
               </tr>
             </thead>
             <tbody>
@@ -85,27 +88,29 @@ export default async function AttestationReportPage({
                   <td className="text-center">{i + 1}</td>
                   <td>{a.student.user.fullName}</td>
                   <td className="text-center">{a.student.group.name}</td>
-                  <td className="text-center">{a.semester.course}к, {a.semester.number} сем.</td>
+                  <td className="text-center">{a.semester.number}</td>
                   <td>{a.discipline.name}</td>
                   <td className="text-center">{assessmentTypeLabel(a.type)}</td>
                   <td className="text-center font-semibold">{a.grade}</td>
                   <td className="text-center">{formatDate(a.date)}</td>
-                  <td>{a.teacher.fullName}</td>
                 </tr>
               ))}
             </tbody>
           </table>
         )}
 
-        <p className="text-[11px] mt-4">
-          Всего записей: {filtered.length}.
-          {sp.dateFrom && ` Период: с ${sp.dateFrom}`}
-          {sp.dateTo && ` по ${sp.dateTo}`}.
-        </p>
+        {(sp.dateFrom || sp.dateTo) && (
+          <p className="text-[11px] mt-4">
+            {sp.dateFrom && `Период: с ${sp.dateFrom}`}
+            {sp.dateTo && ` по ${sp.dateTo}`}.
+          </p>
+        )}
 
-        <DocumentSignatures
-          left={{ title: "Заведующий отделением", name: institution?.departmentHeadName ?? undefined }}
-          right={{ title: "Дата" }}
+        <TeacherReportFooter
+          teacherName={session.fullName}
+          institution={institution}
+          date={new Date()}
+          showTeacherSignature={session.role !== "HEAD"}
         />
       </div>
     </>

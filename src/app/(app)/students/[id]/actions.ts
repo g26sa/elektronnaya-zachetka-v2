@@ -7,6 +7,7 @@ import { getSession, hashPassword } from "@/lib/auth";
 import { assertCan } from "@/lib/rbac";
 import { audit } from "@/lib/audit";
 import { studentProfileSchema } from "@/schemas/student";
+import { isOnAcademicLeave } from "@/lib/student-academic-leave";
 
 export async function updateStudentProfile(studentId: string, input: unknown) {
   const session = await getSession();
@@ -16,9 +17,14 @@ export async function updateStudentProfile(studentId: string, input: unknown) {
   const student = await prisma.student.findUnique({ where: { id: studentId }, include: { user: true } });
   if (!student) throw new Error("Студент не найден");
 
-  // Определяем причину архивации
   const expelled = !!(d.expulsionDate && d.expulsionOrder);
-  const onLeave = !!(d.academicLeaveDate && d.academicLeaveOrder);
+  const leaveStart = d.academicLeaveDate ? new Date(d.academicLeaveDate) : null;
+  const leaveEnd = d.academicLeaveEndDate ? new Date(d.academicLeaveEndDate) : null;
+  const onLeave = isOnAcademicLeave({
+    academicLeaveDate: leaveStart,
+    academicLeaveEndDate: leaveEnd,
+    academicLeaveOrder: d.academicLeaveOrder ?? null,
+  });
   const archiveReason = expelled ? "EXPULSION" : onLeave ? "ACADEMIC_LEAVE" : null;
   const shouldDeactivate = expelled || onLeave;
 
@@ -43,7 +49,8 @@ export async function updateStudentProfile(studentId: string, input: unknown) {
       enrollmentOrder: d.enrollmentOrder ?? null,
       expulsionDate: d.expulsionDate ? new Date(d.expulsionDate) : null,
       expulsionOrder: d.expulsionOrder ?? null,
-      academicLeaveDate: d.academicLeaveDate ? new Date(d.academicLeaveDate) : null,
+      academicLeaveDate: leaveStart,
+      academicLeaveEndDate: leaveEnd,
       academicLeaveOrder: d.academicLeaveOrder ?? null,
       archiveReason,
       currentCourse: d.currentCourse,
