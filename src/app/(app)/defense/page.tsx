@@ -49,14 +49,14 @@ export default async function DefensePage({
 
   // Student: show their own defense record
   if (session.role === "STUDENT" && studentId) {
-    const [vkr, chairs] = await Promise.all([
+    const [vkr, gekChairs] = await Promise.all([
       prisma.vKR.findUnique({
         where: { studentId },
-        include: { defense: { include: { chair: true } }, supervisor: true },
+        include: { defense: { include: { chairGek: true, chair: true } }, supervisor: true },
       }),
-      prisma.user.findMany({ where: { role: { in: ["TEACHER", "HEAD"] } }, orderBy: { fullName: "asc" } }),
+      prisma.gekChair.findMany({ where: { isActive: true }, orderBy: { fullName: "asc" } }),
     ]);
-    const oCh = chairs.map((c) => ({ id: c.id, label: c.fullName }));
+    const oCh = gekChairs.map((c) => ({ id: c.id, label: c.fullName }));
 
     if (!vkr) {
       return (
@@ -74,20 +74,20 @@ export default async function DefensePage({
         <Card>
           <CardHeader><CardTitle className="text-base flex items-center justify-between">
             <span>Защита: {vkr.topic}</span>
-            {can(session, "defense:edit") && (
+            {can(session, "defense:edit") && def && (
               <DefenseForm
                 vkrId={vkr.id}
                 chairs={oCh}
-                initial={def ? {
+                initial={{
                   vkrId: vkr.id,
                   admission: def.admission as Admission,
                   admissionDate: def.admissionDate ? def.admissionDate.toISOString().slice(0, 10) : "",
                   date: def.date ? def.date.toISOString().slice(0, 10) : "",
                   grade: def.grade ?? "",
-                  chairId: def.chairId ?? "",
+                  chairGekId: def.chairGekId ?? "",
                   protocolNumber: def.protocolNumber ?? "",
-                } : { vkrId: vkr.id }}
-                trigger={<Button size="sm" variant="outline"><Pencil className="h-4 w-4 mr-2" />{def ? "Изменить" : "Создать"}</Button>}
+                }}
+                trigger={<Button size="sm" variant="outline"><Pencil className="h-4 w-4 mr-2" />Изменить</Button>}
               />
             )}
           </CardTitle></CardHeader>
@@ -98,7 +98,7 @@ export default async function DefensePage({
                 <Fld label="Дата допуска" v={formatDate(def.admissionDate)} />
                 <Fld label="Дата защиты" v={formatDate(def.date)} />
                 <Fld label="Оценка" v={def.grade ?? "—"} />
-                <Fld label="Председатель ГЭК" v={def.chair?.fullName ?? "—"} />
+                <Fld label="Председатель ГЭК" v={def.chairGek?.fullName ?? def.chair?.fullName ?? "—"} />
                 <Fld label="Протокол" v={def.protocolNumber ?? "—"} />
               </dl>
             ) : (
@@ -111,9 +111,9 @@ export default async function DefensePage({
   }
 
   // HEAD: table view with filters
-  const [allStudents, chairs] = await Promise.all([
+  const [allStudents, gekChairs] = await Promise.all([
     prisma.student.findMany({ include: { user: true, group: true }, orderBy: { user: { fullName: "asc" } } }),
-    prisma.user.findMany({ where: { role: { in: ["TEACHER", "HEAD"] } }, orderBy: { fullName: "asc" } }),
+    prisma.gekChair.findMany({ where: { isActive: true }, orderBy: { fullName: "asc" } }),
   ]);
 
   let filteredStudents = allStudents;
@@ -150,13 +150,14 @@ export default async function DefensePage({
     },
     include: {
       vkr: { include: { student: { include: { user: true, group: true } }, supervisor: true } },
+      chairGek: true,
       chair: true,
     },
     orderBy: [{ vkr: { student: { group: { name: "asc" } } } }],
     ...(hasFilters ? {} : { take: 10 }),
   });
 
-  const oCh = chairs.map((c) => ({ id: c.id, label: c.fullName }));
+  const oCh = gekChairs.map((c) => ({ id: c.id, label: c.fullName }));
 
   const reportParams = new URLSearchParams();
   if (params.speciality) reportParams.set("speciality", params.speciality);
@@ -231,7 +232,7 @@ export default async function DefensePage({
                 </TableCell>
                 <TableCell className="whitespace-nowrap">{formatDate(d.date)}</TableCell>
                 <TableCell>{d.grade ?? "—"}</TableCell>
-                <TableCell>{d.chair?.fullName ?? "—"}</TableCell>
+                <TableCell>{d.chairGek?.fullName ?? d.chair?.fullName ?? "—"}</TableCell>
                 <TableCell className="text-right">
                   {can(session, "defense:edit") && (
                     <DefenseForm
@@ -243,7 +244,7 @@ export default async function DefensePage({
                         admissionDate: d.admissionDate ? d.admissionDate.toISOString().slice(0, 10) : "",
                         date: d.date ? d.date.toISOString().slice(0, 10) : "",
                         grade: d.grade ?? "",
-                        chairId: d.chairId ?? "",
+                        chairGekId: d.chairGekId ?? "",
                         protocolNumber: d.protocolNumber ?? "",
                       }}
                       trigger={<Button variant="ghost" size="icon"><Pencil className="h-4 w-4" /></Button>}
@@ -281,6 +282,7 @@ async function TeacherFlow({
   const admittedDefenses = await prisma.defense.findMany({
     where: { admission: "ADMITTED" },
     include: {
+      chairGek: true,
       chair: true,
       vkr: {
         include: {
@@ -310,7 +312,7 @@ async function TeacherFlow({
       admissionDate: d.admissionDate,
       date: d.date,
       grade: d.grade,
-      chairName: d.chair?.fullName ?? null,
+      chairName: d.chairGek?.fullName ?? d.chair?.fullName ?? null,
     };
   });
 

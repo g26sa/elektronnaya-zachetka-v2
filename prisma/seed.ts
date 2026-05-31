@@ -1,6 +1,7 @@
 import { PrismaClient } from "@prisma/client";
 import bcrypt from "bcryptjs";
 import { DEFAULT_TEMPLATES } from "../src/lib/defaultTemplates";
+import { formatRecordBookNumber } from "../src/lib/record-book-number";
 
 const prisma = new PrismaClient();
 
@@ -97,17 +98,18 @@ async function main() {
 
   // 7. Студенты
   const studentDefs = [
-    { email: "student1@college.local", fullName: "Алексеев Алексей Алексеевич", num: "23-001" },
-    { email: "student2@college.local", fullName: "Беляева Ольга Николаевна",   num: "23-002" },
-    { email: "student3@college.local", fullName: "Волков Дмитрий Андреевич",   num: "23-003" },
+    { email: "student1@college.local", fullName: "Алексеев Алексей Алексеевич" },
+    { email: "student2@college.local", fullName: "Беляева Ольга Николаевна" },
+    { email: "student3@college.local", fullName: "Волков Дмитрий Андреевич" },
   ];
 
   const students = [];
-  for (const sd of studentDefs) {
+  for (let i = 0; i < studentDefs.length; i++) {
+    const sd = studentDefs[i];
     const u = await prisma.user.create({ data: { email: sd.email, passwordHash, role: "STUDENT", fullName: sd.fullName } });
     const s = await prisma.student.create({
       data: {
-        userId: u.id, recordBookNumber: sd.num, groupId: group.id,
+        userId: u.id, recordBookNumber: formatRecordBookNumber(i + 1), groupId: group.id,
         birthDate: new Date("2005-05-15"), enrollmentDate: new Date("2023-09-01"),
         enrollmentOrder: "Приказ № 245-у от 28.08.2023", currentCourse: 2,
       },
@@ -209,6 +211,14 @@ async function main() {
   });
 
   // 11. ВКР + защита для первого студента
+  const gekChair = await prisma.gekChair.create({
+    data: {
+      fullName: head.fullName,
+      position: head.position ?? "Председатель ГЭК",
+      year: 2025,
+    },
+  });
+
   const vkr = await prisma.vKR.create({
     data: {
       studentId: s1.student.id, topic: "Электронная зачётная книжка студента",
@@ -222,7 +232,7 @@ async function main() {
       vkrId: vkr.id, admission: "ADMITTED",
       admissionDate: new Date("2025-05-25"),
       date: new Date("2025-06-15"),
-      grade: "5", chairId: head.id, protocolNumber: "ГЭК-1/2025",
+      grade: "5", chairGekId: gekChair.id, protocolNumber: "ГЭК-1/2025",
     },
   });
 

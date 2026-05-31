@@ -54,17 +54,18 @@ export async function saveDefenseQuick(input: unknown) {
     );
   }
 
-  let chairId: string | null = null;
+  let chairGekId: string | null = null;
   if (d.chairName) {
-    const existing = await prisma.user.findFirst({ where: { fullName: d.chairName } });
-    chairId = existing?.id ?? null;
+    const existing = await prisma.gekChair.findFirst({ where: { fullName: d.chairName } });
+    chairGekId = existing?.id ?? null;
   }
 
   const before = vkr.defense;
   const data = {
     date: d.date ? new Date(d.date) : null,
     grade: d.grade || null,
-    chairId,
+    chairGekId,
+    chairId: null,
   };
 
   const updated = await prisma.defense.update({

@@ -2,6 +2,7 @@
 // Запуск: npx tsx scripts/add-student.ts
 import { PrismaClient } from "@prisma/client";
 import bcrypt from "bcryptjs";
+import { formatRecordBookNumber, maxRecordBookNumber } from "../src/lib/record-book-number";
 
 const prisma = new PrismaClient();
 
@@ -28,13 +29,7 @@ async function main() {
     if (!existing.student) {
       // Подберём свободный номер зачётной книжки
       const numbers = (await prisma.student.findMany({ select: { recordBookNumber: true } })).map((s) => s.recordBookNumber);
-      let n = 4;
-      let recordBookNumber = "";
-      while (true) {
-        recordBookNumber = `23-${String(n).padStart(3, "0")}`;
-        if (!numbers.includes(recordBookNumber)) break;
-        n++;
-      }
+      const recordBookNumber = formatRecordBookNumber(maxRecordBookNumber(numbers) + 1);
       await prisma.student.create({
         data: {
           userId: existing.id,
@@ -50,13 +45,7 @@ async function main() {
     }
   } else {
     const numbers = (await prisma.student.findMany({ select: { recordBookNumber: true } })).map((s) => s.recordBookNumber);
-    let n = 4;
-    let recordBookNumber = "";
-    while (true) {
-      recordBookNumber = `23-${String(n).padStart(3, "0")}`;
-      if (!numbers.includes(recordBookNumber)) break;
-      n++;
-    }
+    const recordBookNumber = formatRecordBookNumber(maxRecordBookNumber(numbers) + 1);
     const user = await prisma.user.create({
       data: { email, passwordHash, role: "STUDENT", fullName, isActive: true },
     });

@@ -60,7 +60,10 @@ export function StudentProfileForm({
       <section className="space-y-3">
         <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Студенческие данные</h3>
         <div className="grid sm:grid-cols-2 gap-4">
-          <F label="№ зачётной книжки" err={errors.recordBookNumber?.message}><Input {...register("recordBookNumber")} /></F>
+          <F label="№ зачётной книжки">
+            <Input value={initial.recordBookNumber} readOnly disabled className="bg-muted" />
+            <input type="hidden" {...register("recordBookNumber")} />
+          </F>
           <Sel label="Группа" {...register("groupId")} options={groups} err={errors.groupId?.message} />
           <F label="Дата рождения" err={errors.birthDate?.message}><Input type="date" {...register("birthDate")} /></F>
           <F label="Дата зачисления" err={errors.enrollmentDate?.message}><Input type="date" {...register("enrollmentDate")} /></F>

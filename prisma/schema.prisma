@@ -90,6 +90,15 @@ model DisciplineType {
   updatedAt DateTime @updatedAt
 }
 
+model Speciality {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  isActive  Boolean  @default(true)
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
 model GekChair {
   id          String      @id @default(cuid())
   fullName    String
@@ -99,6 +108,7 @@ model GekChair {
   isActive    Boolean     @default(true)
   createdAt   DateTime    @default(now())
   updatedAt   DateTime    @updatedAt
+  defenses    Defense[]
   stateExams  StateExam[]
 }
 
@@ -276,10 +286,12 @@ model Defense {
   date           DateTime?
   grade          String?
   chairId        String?
+  chairGekId     String?
   protocolNumber String?
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
   chair          User?     @relation("DefenseChair", fields: [chairId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  chairGek       GekChair? @relation(fields: [chairGekId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   vkr            VKR       @relation(fields: [vkrId], references: [id], onDelete: Cascade)
 }
 

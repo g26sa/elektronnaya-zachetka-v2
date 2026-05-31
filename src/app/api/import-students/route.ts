@@ -3,6 +3,10 @@ import * as XLSX from "xlsx";
 import { prisma } from "@/lib/db";
 import bcrypt from "bcryptjs";
 import { parseStudentsSheet } from "@/lib/import-students-parse";
+import {
+  formatRecordBookNumber,
+  maxRecordBookNumber,
+} from "@/lib/record-book-number";
 
 async function findGroupByName(name: string) {
   const trimmed = name.trim();
@@ -73,16 +77,8 @@ export async function POST(req: NextRequest) {
     const digits = groupName.replace(/\D/g, "");
     const course = digits.length >= 2 ? parseInt(digits[1], 10) : 1;
 
-    const speciality = group.speciality ?? "";
-    const existingInSpeciality = await prisma.student.findMany({
-      where: { group: { speciality: speciality || undefined } },
-      select: { recordBookNumber: true },
-    });
-    let maxNum = 0;
-    for (const s of existingInSpeciality) {
-      const n = parseInt(s.recordBookNumber.replace(/\D/g, ""), 10);
-      if (!isNaN(n) && n > maxNum) maxNum = n;
-    }
+    const allNumbers = await prisma.student.findMany({ select: { recordBookNumber: true } });
+    let maxNum = maxRecordBookNumber(allNumbers.map((s) => s.recordBookNumber));
 
     const created: string[] = [];
     const updated: string[] = [];
@@ -145,7 +141,7 @@ export async function POST(req: NextRequest) {
         }
 
         maxNum += 1;
-        const recordBookNumber = String(maxNum);
+        const recordBookNumber = formatRecordBookNumber(maxNum);
 
         await prisma.$transaction(async (tx) => {
           const user = await tx.user.create({

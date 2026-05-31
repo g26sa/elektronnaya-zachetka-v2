@@ -32,7 +32,7 @@ export function DefenseForm({
       admissionDate: initial?.admissionDate ?? "",
       date: initial?.date ?? "",
       grade: initial?.grade ?? "",
-      chairId: initial?.chairId ?? "",
+      chairGekId: initial?.chairGekId ?? "",
       protocolNumber: initial?.protocolNumber ?? "",
     },
   });
@@ -56,7 +56,7 @@ export function DefenseForm({
           <F label="Дата допуска"><Input type="date" {...register("admissionDate")} /></F>
           <F label="Дата защиты"><Input type="date" {...register("date")} /></F>
           <F label="Оценка"><Input {...register("grade")} /></F>
-          <Sel label="Председатель ГЭК" {...register("chairId")} options={chairs} />
+          <Sel label="Председатель ГЭК" {...register("chairGekId")} options={chairs} />
           <F label="№ протокола"><Input {...register("protocolNumber")} /></F>
           {err && <p className="sm:col-span-2 text-sm text-destructive">{err}</p>}
           <DialogFooter className="sm:col-span-2">

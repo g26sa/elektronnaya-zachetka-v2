@@ -16,7 +16,7 @@ export async function buildStudentContext(studentId: string) {
         assessments: { include: { discipline: true, semester: true, teacher: true }, orderBy: [{ semester: { academicYear: "asc" } }, { semester: { number: "asc" } }, { date: "asc" }] },
         courseWorks: { include: { discipline: true, semester: true, teacher: true }, orderBy: { date: "asc" } },
         practices: { include: { semester: true, instSupervisor: true }, orderBy: { startDate: "asc" } },
-        vkr: { include: { supervisor: true, defense: { include: { chair: true } } } },
+        vkr: { include: { supervisor: true, defense: { include: { chairGek: true, chair: true } } } },
         stateExams: { include: { chair: true, chairGek: true } as any, orderBy: { date: "asc" } },
       },
     }),
@@ -98,7 +98,7 @@ export async function buildStudentContext(studentId: string) {
                 admissionDate: formatDate(student.vkr.defense.admissionDate),
                 date: formatDate(student.vkr.defense.date),
                 grade: student.vkr.defense.grade ?? "",
-                chair: student.vkr.defense.chair?.fullName ?? "",
+                chair: student.vkr.defense.chairGek?.fullName ?? student.vkr.defense.chair?.fullName ?? "",
                 protocolNumber: student.vkr.defense.protocolNumber ?? "",
               }
             : null,

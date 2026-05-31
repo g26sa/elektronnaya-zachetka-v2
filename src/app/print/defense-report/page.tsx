@@ -29,7 +29,7 @@ export default async function DefenseReportPage({
     where: { studentId: { in: studentIds } },
     include: {
       student: { include: { user: true, group: true } },
-      defense: { include: { chair: true } },
+      defense: { include: { chairGek: true, chair: true } },
     },
   });
 
@@ -80,7 +80,7 @@ export default async function DefenseReportPage({
                   <td className="text-center">{admissionLabel(v.defense!.admission)}</td>
                   <td className="text-center">{formatDate(v.defense!.date)}</td>
                   <td className="text-center"><b>{v.defense!.grade ?? "—"}</b></td>
-                  <td>{v.defense!.chair?.fullName ?? "—"}</td>
+                  <td>{v.defense!.chairGek?.fullName ?? v.defense!.chair?.fullName ?? "—"}</td>
                 </tr>
               ))}
             </tbody>

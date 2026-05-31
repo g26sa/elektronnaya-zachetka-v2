@@ -91,18 +91,18 @@ export default async function GiaPage({
         <Card>
           <CardHeader><CardTitle className="text-base flex items-center justify-between">
             <span>Тема ВКР</span>
-            {can(session, "vkr:edit") && (
+            {can(session, "vkr:edit") && vkr && (
               <VkrForm
                 students={oS} teachers={oT}
-                initial={vkr ? {
+                initial={{
                   studentId,
                   topic: vkr.topic,
                   type: vkr.type ?? "",
                   approvedOrder: vkr.approvedOrder ?? "",
                   approvedDate: vkr.approvedDate ? vkr.approvedDate.toISOString().slice(0, 10) : "",
                   supervisorId: vkr.supervisorId,
-                } : { studentId }}
-                trigger={<Button size="sm" variant="outline"><Pencil className="h-4 w-4 mr-2" />{vkr ? "Изменить" : "Назначить"}</Button>}
+                }}
+                trigger={<Button size="sm" variant="outline"><Pencil className="h-4 w-4 mr-2" />Изменить</Button>}
               />
             )}
           </CardTitle></CardHeader>

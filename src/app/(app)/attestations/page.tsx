@@ -284,7 +284,7 @@ async function StaffView({
       ])
     : [null, null];
 
-  const [allStudents, disciplines, teachers] = await Promise.all([
+  const [allStudents, disciplines, teachers, semesters] = await Promise.all([
     prisma.student.findMany({
       where: allowedStudentIds ? { id: { in: allowedStudentIds } } : undefined,
       include: { user: true, group: true },
@@ -295,6 +295,7 @@ async function StaffView({
       orderBy: { name: "asc" },
     }),
     prisma.user.findMany({ where: { role: { in: ["TEACHER", "HEAD"] } }, orderBy: { fullName: "asc" } }),
+    prisma.semester.findMany({ orderBy: [{ course: "asc" }, { number: "asc" }] }),
   ]);
 
   // Каскадные фильтры для студентов
@@ -306,6 +307,10 @@ async function StaffView({
   const studentOpts = allStudents.map((s) => ({ id: s.id, label: `${s.user.fullName} (${s.group.name})` }));
   const disciplineOpts = disciplines.map((d) => ({ id: d.id, label: d.name }));
   const teacherOpts = teachers.map((t) => ({ id: t.id, label: t.fullName }));
+  const semesterOpts = semesters.map((s) => ({
+    id: s.id,
+    label: `${s.course} курс, ${s.number} сем. (${s.academicYear})`,
+  }));
 
   // Уникальные значения для фильтров
   const specialities = Array.from(new Set(allStudents.map((s) => s.group.speciality).filter(Boolean) as string[])).sort();
@@ -479,7 +484,7 @@ async function StaffView({
                           protocolNumber: a.protocolNumber,
                         }}
                         students={studentOpts}
-                        semesters={[]}
+                        semesters={semesterOpts}
                         disciplines={disciplineOpts}
                         teachers={teacherOpts}
                         canEdit={can(session, "assessment:edit") && (session.role !== "TEACHER" || a.teacherId === session.userId)}

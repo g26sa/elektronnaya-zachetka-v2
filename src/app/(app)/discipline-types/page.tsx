@@ -9,7 +9,17 @@ import { Plus } from "lucide-react";
 
 export default async function DisciplineTypesPage() {
   await requireRole("HEAD");
-  const items = await (prisma as any).disciplineType.findMany({ orderBy: { sortOrder: "asc" } });
+
+  const disciplines = await prisma.discipline.findMany({ orderBy: { name: "asc" } });
+  for (const d of disciplines) {
+    await (prisma as any).disciplineType.upsert({
+      where: { name: d.name },
+      update: {},
+      create: { name: d.name, isActive: true, sortOrder: 0 },
+    });
+  }
+
+  const items = await (prisma as any).disciplineType.findMany({ orderBy: { name: "asc" } });
 
   return (
     <div className="space-y-4">
@@ -29,20 +39,18 @@ export default async function DisciplineTypesPage() {
               <TableRow>
                 <TableHead>Название</TableHead>
                 <TableHead>Активен</TableHead>
-                <TableHead>Порядок</TableHead>
                 <TableHead className="text-right">Действия</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {items.length === 0 ? (
-                <TableRow><TableCell colSpan={4} className="text-center text-muted-foreground py-10">Справочник пуст.</TableCell></TableRow>
+                <TableRow><TableCell colSpan={3} className="text-center text-muted-foreground py-10">Справочник пуст.</TableCell></TableRow>
               ) : items.map((t: any) => (
                 <TableRow key={t.id}>
                   <TableCell className="font-medium">{t.name}</TableCell>
                   <TableCell>
                     {t.isActive ? <Badge variant="success">да</Badge> : <Badge variant="secondary">нет</Badge>}
                   </TableCell>
-                  <TableCell>{t.sortOrder}</TableCell>
                   <TableCell className="text-right">
                     <div className="flex justify-end gap-1">
                       <DisciplineTypeForm

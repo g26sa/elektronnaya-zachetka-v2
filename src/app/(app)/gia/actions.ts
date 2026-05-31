@@ -11,6 +11,9 @@ export async function upsertVkr(input: unknown) {
   assertCan(session, "vkr:edit");
   const d = vkrSchema.parse(input);
   const before = await prisma.vKR.findUnique({ where: { studentId: d.studentId } });
+  if (!before && session.role === "HEAD") {
+    throw new Error("Заведующий может только редактировать существующие ВКР");
+  }
   const data = {
     topic: d.topic,
     type: d.type ?? null,

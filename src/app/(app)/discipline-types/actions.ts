@@ -11,14 +11,13 @@ const schema = z.object({
   id: z.string().optional(),
   name: z.string().min(1, "Введите название"),
   isActive: z.coerce.boolean().optional(),
-  sortOrder: z.coerce.number().int().optional(),
 });
 
 export async function saveDisciplineType(input: unknown) {
   const session = await getSession();
   assertCan(session, "reference:edit");
   const d = schema.parse(input);
-  const data = { name: d.name, isActive: d.isActive ?? true, sortOrder: d.sortOrder ?? 0 };
+  const data = { name: d.name, isActive: d.isActive ?? true };
   if (d.id) {
     const before = await (prisma as any).disciplineType.findUnique({ where: { id: d.id } });
     const updated = await (prisma as any).disciplineType.update({ where: { id: d.id }, data });

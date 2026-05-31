@@ -8,6 +8,7 @@ import { GroupRowActions } from "./GroupRowActions";
 import { GroupImportDialog } from "./GroupImportDialog";
 import { GroupsFilterClient } from "./GroupsFilterClient";
 import { GroupForm } from "./GroupForm";
+import { SpecialityImportDialog } from "./SpecialityImportDialog";
 import { Users, Plus } from "lucide-react";
 
 export default async function GroupsPage({
@@ -23,9 +24,23 @@ export default async function GroupsPage({
     orderBy: [{ startYear: "desc" }, { name: "asc" }],
   });
 
+  const [importedSpecialities, groupSpecialities] = await Promise.all([
+    (prisma as any).speciality.findMany({
+      where: { isActive: true },
+      orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
+      select: { name: true },
+    }),
+    Promise.resolve(
+      Array.from(new Set(allGroups.map((g) => g.speciality).filter(Boolean) as string[]))
+    ),
+  ]);
+
   const specialities = Array.from(
-    new Set(allGroups.map((g) => g.speciality).filter(Boolean) as string[])
-  ).sort();
+    new Set([
+      ...importedSpecialities.map((s: { name: string }) => s.name),
+      ...groupSpecialities,
+    ])
+  ).sort((a, b) => a.localeCompare(b, "ru"));
 
   const years = Array.from(new Set(allGroups.map((g) => g.startYear))).sort((a, b) => b - a);
 
@@ -37,16 +52,19 @@ export default async function GroupsPage({
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between gap-4">
+      <div className="flex items-center justify-between gap-4 flex-wrap">
         <h1 className="text-2xl font-semibold">Группы</h1>
-        <GroupForm
-          specialities={specialities}
-          trigger={
-            <Button>
-              <Plus className="h-4 w-4 mr-2" />Новая группа
-            </Button>
-          }
-        />
+        <div className="flex gap-2 flex-wrap">
+          <SpecialityImportDialog />
+          <GroupForm
+            specialities={specialities}
+            trigger={
+              <Button>
+                <Plus className="h-4 w-4 mr-2" />Новая группа
+              </Button>
+            }
+          />
+        </div>
       </div>
 
       <GroupsFilterClient

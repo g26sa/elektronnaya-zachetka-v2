@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { groupSchema, type GroupInput } from "@/schemas/group";
 import { createGroup, updateGroup } from "./actions";
+import { controlledSelectProps } from "@/components/forms/controlled-select";
 
 export function GroupForm({
   trigger, id, initial, specialities,
@@ -16,7 +17,6 @@ export function GroupForm({
   trigger: React.ReactNode;
   id?: string;
   initial?: Partial<GroupInput>;
-  /** Подсказки — список уже существующих специальностей. */
   specialities?: string[];
 }) {
   const [open, setOpen] = useState(false);
@@ -45,6 +45,8 @@ export function GroupForm({
     });
   });
 
+  const specOpts = specialities ?? [];
+
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>{trigger}</DialogTrigger>
@@ -58,7 +60,24 @@ export function GroupForm({
             <Input type="number" min={1990} max={2100} {...register("startYear")} />
           </F>
           <F label="Специальность / направление" err={errors.speciality?.message} className="sm:col-span-2">
-            <Input {...register("speciality")} />
+            {specOpts.length > 0 ? (
+              <select
+                {...controlledSelectProps(register("speciality"))}
+                className="flex h-9 w-full rounded-md border border-input bg-background px-3 text-sm shadow-sm"
+              >
+                <option value="">— выберите специальность —</option>
+                {specOpts.map((s) => (
+                  <option key={s} value={s}>{s}</option>
+                ))}
+              </select>
+            ) : (
+              <>
+                <Input {...register("speciality")} placeholder="Сначала импортируйте специальности" />
+                <p className="text-xs text-muted-foreground mt-1">
+                  Загрузите список специальностей через «Импорт специальностей» на странице групп.
+                </p>
+              </>
+            )}
           </F>
 
           {err && <p className="sm:col-span-2 text-sm text-destructive">{err}</p>}

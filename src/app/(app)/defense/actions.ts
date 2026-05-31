@@ -11,12 +11,16 @@ export async function upsertDefense(input: unknown) {
   assertCan(session, "defense:edit");
   const d = defenseSchema.parse(input);
   const before = await prisma.defense.findUnique({ where: { vkrId: d.vkrId } });
+  if (!before && session.role === "HEAD") {
+    throw new Error("Заведующий может только редактировать существующие записи о защите");
+  }
   const data = {
     admission: d.admission,
     admissionDate: d.admissionDate ? new Date(d.admissionDate) : null,
     date: d.date ? new Date(d.date) : null,
     grade: d.grade ?? null,
-    chairId: d.chairId ?? null,
+    chairGekId: d.chairGekId ?? null,
+    chairId: null,
     protocolNumber: d.protocolNumber ?? null,
   };
   const result = before

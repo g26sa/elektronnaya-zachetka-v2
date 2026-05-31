@@ -13,20 +13,19 @@ export function DisciplineTypeForm({
   trigger, initial,
 }: {
   trigger: React.ReactNode;
-  initial?: { id: string; name: string; isActive: boolean; sortOrder: number };
+  initial?: { id: string; name: string; isActive: boolean };
 }) {
   const [open, setOpen] = useState(false);
   const [pending, startTransition] = useTransition();
   const [err, setErr] = useState<string | null>(null);
   const [name, setName] = useState(initial?.name ?? "");
   const [isActive, setIsActive] = useState(initial?.isActive ?? true);
-  const [sortOrder, setSortOrder] = useState(initial?.sortOrder ?? 0);
 
   function submit(e: React.FormEvent) {
     e.preventDefault();
     setErr(null);
     startTransition(async () => {
-      try { await saveDisciplineType({ id: initial?.id, name, isActive, sortOrder }); setOpen(false); }
+      try { await saveDisciplineType({ id: initial?.id, name, isActive }); setOpen(false); }
       catch (e) { setErr(e instanceof Error ? e.message : "Ошибка"); }
     });
   }
@@ -44,10 +43,6 @@ export function DisciplineTypeForm({
           <div className="flex items-center gap-2">
             <input id="active" type="checkbox" checked={isActive} onChange={(e) => setIsActive(e.target.checked)} />
             <Label htmlFor="active">Активен</Label>
-          </div>
-          <div className="space-y-1.5">
-            <Label>Порядок сортировки</Label>
-            <Input type="number" value={sortOrder} onChange={(e) => setSortOrder(Number(e.target.value))} />
           </div>
           {err && <p className="text-sm text-destructive">{err}</p>}
           <DialogFooter>
