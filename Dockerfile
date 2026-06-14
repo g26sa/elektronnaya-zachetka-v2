@@ -14,8 +14,9 @@ RUN npm ci
 FROM base AS builder
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
-# Фиктивный URL только для генерации клиента и сборки (реальный задаётся в compose)
+# Фиктивные значения только для генерации клиента и сборки (реальные задаются в compose)
 ENV DATABASE_URL="sqlserver://localhost:1433;database=ezk;trustServerCertificate=true"
+ENV JWT_SECRET="build-time-placeholder-not-used-at-runtime-0000"
 RUN npx prisma generate
 RUN npm run build
 
