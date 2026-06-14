@@ -24,7 +24,7 @@ export default async function PrintCoursework({ params }: { params: Promise<{ st
 
   return (
     <>
-      <PrintBar filename={`Курсовая работа — ${ctx.fullName}`} />
+      <PrintBar filename={`Курсовая работа — ${ctx.student.fullName}`} />
       <div className="document p-[15mm_20mm]">
         <div dangerouslySetInnerHTML={{ __html: html }} />
         {session.role === "STUDENT" ? (

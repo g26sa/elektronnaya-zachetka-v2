@@ -86,7 +86,7 @@ export default async function StateExamPage({
         }
       } : {}),
     },
-    include: { student: { include: { user: true, group: true } }, chair: true, chairGek: true } as any,
+    include: { student: { include: { user: true, group: true } }, chair: true, chairGek: true },
     orderBy: { date: "desc" },
     ...(hasFilters ? {} : { take: 10 }),
   });
@@ -241,7 +241,7 @@ async function TeacherFlow({
       student: { include: { user: true, group: true } },
       chair: true,
       chairGek: true,
-    } as any,
+    },
     orderBy: { date: "desc" },
   });
 
@@ -257,7 +257,7 @@ async function TeacherFlow({
     admissionDate: e.admissionDate,
     date: e.date,
     grade: e.grade,
-    chairName: (e as any).chairGek?.fullName ?? e.chair?.fullName ?? null,
+    chairName: e.chairGek?.fullName ?? e.chair?.fullName ?? null,
   }));
 
   return (

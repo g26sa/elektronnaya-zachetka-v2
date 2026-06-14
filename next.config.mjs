@@ -7,6 +7,12 @@ const nextConfig = {
     appIsrStatus: false,
     buildActivity: false,
   },
+  // Автономная сборка для Docker (копирует только нужные node_modules в .next/standalone)
+  output: "standalone",
+  // Без этого в standalone-сборке отсутствует бинарник Prisma Query Engine
+  outputFileTracingIncludes: {
+    "/**/*": ["./node_modules/.prisma/client/**/*"],
+  },
 };
 
 export default nextConfig;

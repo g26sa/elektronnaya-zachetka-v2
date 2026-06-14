@@ -9,7 +9,7 @@ import { useConfirm } from "@/components/ui/confirm-dialog";
 import type { SemesterRef } from "@/lib/group-course";
 
 type Opt = { id: string; label: string };
-type GroupOpt = { id: string; name: string };
+type GroupOpt = { id: string; name: string; speciality: string };
 type StudentOpt = { id: string; label: string; groupId: string };
 
 export function PlanRowActions(props: {

@@ -15,6 +15,8 @@ function findBrowser(): string | null {
     path.join(pf, "Microsoft", "Edge", "Application", "msedge.exe"),
     path.join(la, "Microsoft", "Edge", "Application", "msedge.exe"),
     ...(process.env.CHROME_PATH ? [process.env.CHROME_PATH] : []),
+    "/usr/bin/chromium-browser",
+    "/usr/bin/chromium",
   ];
 
   for (const p of candidates) {
@@ -81,7 +83,7 @@ export async function GET(req: NextRequest) {
     await browser.close();
 
     const filename = encodeURIComponent(safeName + ".pdf");
-    return new NextResponse(pdfBuffer as Buffer, {
+    return new NextResponse(new Uint8Array(pdfBuffer), {
       headers: {
         "Content-Type": "application/pdf",
         "Content-Disposition": `attachment; filename*=UTF-8''${filename}`,

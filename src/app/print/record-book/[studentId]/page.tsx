@@ -27,7 +27,7 @@ export default async function PrintRecordBook({ params }: { params: Promise<{ st
 
   return (
     <>
-      <PrintBar filename={`Зачётная книжка — ${ctx.fullName}`} />
+      <PrintBar filename={`Зачётная книжка — ${ctx.student.fullName}`} />
       <div className="document p-[15mm_20mm]">
         <div dangerouslySetInnerHTML={{ __html: html }} />
         {session.role !== "STUDENT" && (

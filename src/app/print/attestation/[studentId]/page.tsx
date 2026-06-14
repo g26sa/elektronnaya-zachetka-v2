@@ -22,7 +22,7 @@ export default async function PrintAttestation({ params }: { params: Promise<{ s
 
   return (
     <>
-      <PrintBar filename={`Промежуточная аттестация — ${ctx.fullName}`} />
+      <PrintBar filename={`Промежуточная аттестация — ${ctx.student.fullName}`} />
       <div className="document p-[15mm_20mm]">
         <div dangerouslySetInnerHTML={{ __html: html }} />
         {session.role === "STUDENT" ? (

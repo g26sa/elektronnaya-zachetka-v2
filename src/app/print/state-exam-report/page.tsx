@@ -32,7 +32,7 @@ export default async function StateExamReportPage({
     where = { studentId: { in: all.length > 0 ? all : ["__none__"] } };
   }
 
-  const items = await (prisma.stateExam.findMany as Function)({
+  const items = await prisma.stateExam.findMany({
     where,
     include: {
       student: { include: { user: true, group: true } },

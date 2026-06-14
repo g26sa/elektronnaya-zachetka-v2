@@ -25,7 +25,7 @@ export default async function PrintGIA({ params }: { params: Promise<{ studentId
 
   return (
     <>
-      <PrintBar filename={`ВКР — ${ctx.fullName}`} />
+      <PrintBar filename={`ВКР — ${ctx.student.fullName}`} />
       <div className="document p-[15mm_20mm]">
         <div dangerouslySetInnerHTML={{ __html: html }} />
         {session.role === "STUDENT" ? (
