@@ -1,5 +1,10 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  async rewrites() {
+    return [
+      { source: "/uploads/:path*", destination: "/api/uploads/:path*" },
+    ];
+  },
   reactStrictMode: true,
   // Скрываем служебный индикатор сборки Next.js в левом нижнем углу
   // (он функционален, но не нужен пользователям приложения).
