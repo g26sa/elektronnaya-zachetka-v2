@@ -67,6 +67,26 @@ export default async function PlanPage({
   const params = await searchParams;
   const activeTab = (TABS.find((t) => t.key === params.tab)?.key ?? "ASSESSMENT") as TeachingKind;
 
+  // Гарантируем наличие семестров для курсов 1–4 (по 2 семестра каждый)
+  const currentYear = new Date().getFullYear();
+  for (let course = 1; course <= 4; course++) {
+    const startYear = currentYear - course + 1;
+    const academicYear = `${startYear}/${startYear + 1}`;
+    for (const num of [1, 2]) {
+      await prisma.semester.upsert({
+        where: { course_number_academicYear: { course, number: num, academicYear } },
+        update: {},
+        create: {
+          course,
+          number: num,
+          academicYear,
+          startDate: new Date(num === 1 ? `${startYear}-09-01` : `${startYear + 1}-02-01`),
+          endDate:   new Date(num === 1 ? `${startYear + 1}-01-31` : `${startYear + 1}-06-30`),
+        },
+      });
+    }
+  }
+
   const [items, teachers, semesters, disciplines, groups, students] = await Promise.all([
     prisma.teachingAssignment.findMany({
       where: { kind: activeTab },
