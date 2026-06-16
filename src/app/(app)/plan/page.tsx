@@ -105,7 +105,25 @@ export default async function PlanPage({
     }),
     prisma.user.findMany({ where: { role: "TEACHER", isActive: true }, orderBy: { fullName: "asc" } }),
     prisma.semester.findMany({ orderBy: [{ course: "asc" }, { number: "asc" }] }),
-    prisma.discipline.findMany({ orderBy: { name: "asc" } }),
+    // Объединяем Discipline и DisciplineType чтобы показать полный справочник
+    (async () => {
+      const [fromDisc, fromTypes] = await Promise.all([
+        prisma.discipline.findMany({ orderBy: { name: "asc" } }),
+        (prisma as any).disciplineType.findMany({ where: { isActive: true }, orderBy: { name: "asc" } }),
+      ]);
+      const byName = new Map(fromDisc.map((d: { id: string; name: string }) => [d.name, d]));
+      for (const t of fromTypes as { name: string }[]) {
+        if (!byName.has(t.name)) {
+          const created = await prisma.discipline.upsert({
+            where: { name: t.name },
+            update: {},
+            create: { name: t.name },
+          });
+          byName.set(t.name, created);
+        }
+      }
+      return Array.from(byName.values()).sort((a, b) => a.name.localeCompare(b.name, "ru"));
+    })(),
     prisma.group.findMany({ orderBy: { name: "asc" } }),
     prisma.student.findMany({ include: { user: true, group: true }, orderBy: { user: { fullName: "asc" } } }),
   ]);
