@@ -83,7 +83,7 @@ export default async function PlanPage({
         { semester: { number: "asc" } },
       ],
     }),
-    prisma.user.findMany({ where: { role: { in: ["TEACHER", "HEAD"] }, isActive: true }, orderBy: { fullName: "asc" } }),
+    prisma.user.findMany({ where: { role: "TEACHER", isActive: true }, orderBy: { fullName: "asc" } }),
     prisma.semester.findMany({ orderBy: [{ course: "asc" }, { number: "asc" }] }),
     prisma.discipline.findMany({ orderBy: { name: "asc" } }),
     prisma.group.findMany({ orderBy: { name: "asc" } }),
