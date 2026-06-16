@@ -21,12 +21,27 @@ export async function saveDisciplineType(input: unknown) {
   if (d.id) {
     const before = await (prisma as any).disciplineType.findUnique({ where: { id: d.id } });
     const updated = await (prisma as any).disciplineType.update({ where: { id: d.id }, data });
+    // Sync name change to Discipline table so it appears in plan dropdowns
+    if (before && before.name !== d.name) {
+      await prisma.discipline.upsert({
+        where: { name: d.name },
+        update: {},
+        create: { name: d.name },
+      });
+    }
     await audit({ userId: session.userId, action: "UPDATE", entity: "DisciplineType", entityId: d.id, before, after: updated });
   } else {
     const created = await (prisma as any).disciplineType.create({ data });
+    // Also add to Discipline table so it appears in plan dropdowns
+    await prisma.discipline.upsert({
+      where: { name: d.name },
+      update: {},
+      create: { name: d.name },
+    });
     await audit({ userId: session.userId, action: "CREATE", entity: "DisciplineType", entityId: created.id, after: created });
   }
   revalidatePath("/discipline-types");
+  revalidatePath("/plan");
 }
 
 export async function deleteDisciplineType(id: string) {

@@ -10,6 +10,7 @@ import { Plus } from "lucide-react";
 export default async function DisciplineTypesPage() {
   await requireRole("HEAD");
 
+  // Sync Discipline → DisciplineType (from plan imports)
   const disciplines = await prisma.discipline.findMany({ orderBy: { name: "asc" } });
   for (const d of disciplines) {
     await (prisma as any).disciplineType.upsert({
@@ -20,6 +21,15 @@ export default async function DisciplineTypesPage() {
   }
 
   const items = await (prisma as any).disciplineType.findMany({ orderBy: { name: "asc" } });
+
+  // Sync DisciplineType → Discipline (manually added items appear in plan dropdowns)
+  for (const t of items) {
+    await prisma.discipline.upsert({
+      where: { name: t.name },
+      update: {},
+      create: { name: t.name },
+    });
+  }
 
   return (
     <div className="space-y-4">
